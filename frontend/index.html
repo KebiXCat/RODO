@@ -23,6 +23,7 @@
     <nav class="tabs">
         <button class="tab-btn active" data-tab="masking">🎭 Maskowanie danych</button>
         <button class="tab-btn" data-tab="analyzer">📊 Analiza formularza</button>
+        <button class="tab-btn" data-tab="upload">📁 Wczytaj dane</button>
         <button class="tab-btn" data-tab="flow">🔐 Przepływ danych</button>
         <button class="tab-btn" data-tab="rights">⚖️ Prawa użytkownika</button>
     </nav>
@@ -729,6 +730,91 @@
                     <div class="log-entry info">
                         🚀 Inspector uruchomiony. Zacznij wypełniać formularz...
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ SEKCJA UPLOAD: WCZYTAJ DANE ============ -->
+    <section id="upload" class="tab-content">
+        <div class="upload-container">
+            <!-- LEWA KOLUMNA: Formularz wczytywania -->
+            <div class="panel upload-panel">
+                <h2>📁 Wczytaj plik danych</h2>
+                <p class="upload-desc">Załaduj plik JSON lub CSV — dane są przetwarzane wyłącznie lokalnie w przeglądarce, nigdy nie opuszczają Twojego urządzenia.</p>
+
+                <div class="dropzone" id="dropzone">
+                    <div class="dropzone-icon">📂</div>
+                    <div class="dropzone-text">Przeciągnij i upuść plik tutaj</div>
+                    <div class="dropzone-sub">lub kliknij, aby wybrać</div>
+                    <div class="dropzone-types">Obsługiwane formaty: <strong>.json</strong> · <strong>.csv</strong></div>
+                    <input type="file" id="file-input" accept=".json,.csv" style="display:none;">
+                </div>
+
+                <div class="file-info-card" id="file-info-card" style="display:none;">
+                    <div class="file-info-icon" id="file-info-icon">📄</div>
+                    <div class="file-info-details">
+                        <div class="file-info-name" id="file-info-name"></div>
+                        <div class="file-info-meta" id="file-info-meta"></div>
+                    </div>
+                    <button class="file-clear-btn" id="file-clear-btn" title="Usuń plik">✕</button>
+                </div>
+
+                <div class="upload-options" id="upload-options" style="display:none;">
+                    <h3>⚙️ Opcje wyświetlania</h3>
+                    <div class="option-row">
+                        <label class="option-label">Widok podglądu</label>
+                        <div class="view-toggle">
+                            <button class="view-btn active" id="view-btn-formatted" data-view="formatted">Sformatowany</button>
+                            <button class="view-btn" id="view-btn-raw" data-view="raw">Surowy tekst</button>
+                        </div>
+                    </div>
+                    <div class="option-row" id="csv-options" style="display:none;">
+                        <label class="option-label">Separator CSV</label>
+                        <select id="csv-separator" class="option-select">
+                            <option value=",">Przecinek (,)</option>
+                            <option value=";">Średnik (;)</option>
+                            <option value="\t">Tabulator</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="upload-stats" id="upload-stats" style="display:none;">
+                    <h3>📊 Statystyki pliku</h3>
+                    <div class="stats-grid" id="stats-grid"></div>
+                </div>
+
+                <div class="gdpr-note">
+                    <div class="gdpr-note-icon">🔒</div>
+                    <div>
+                        <strong>Ochrona danych RODO</strong><br>
+                        Plik nie jest wysyłany na żaden serwer. Cała analiza odbywa się po stronie klienta (client-side) za pomocą Web File API.
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRAWA KOLUMNA: Podgląd zawartości -->
+            <div class="panel preview-panel">
+                <div class="preview-header">
+                    <h2>👁️ Podgląd zawartości</h2>
+                    <div class="preview-actions" id="preview-actions" style="display:none;">
+                        <button class="preview-action-btn" id="btn-copy">📋 Kopiuj</button>
+                    </div>
+                </div>
+
+                <div class="preview-empty" id="preview-empty">
+                    <div class="preview-empty-icon">📋</div>
+                    <p>Wczytaj plik, aby zobaczyć jego zawartość</p>
+                    <p class="preview-empty-sub">Obsługiwane formaty: JSON i CSV</p>
+                </div>
+
+                <div class="preview-content" id="preview-content" style="display:none;">
+                    <!-- Wypełniany dynamicznie przez JS -->
+                </div>
+
+                <div class="preview-error" id="preview-error" style="display:none;">
+                    <div class="preview-error-icon">⚠️</div>
+                    <p id="preview-error-msg"></p>
                 </div>
             </div>
         </div>

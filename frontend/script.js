@@ -591,3 +591,264 @@ document.addEventListener('click', function(e) {
     if (act === 'toggle-consent') action.classList.toggle('active');
     if (act === 'simulate-delete') simulateDelete();
 });
+
+// ============ SEKCJA UPLOAD: WCZYTAJ DANE ============
+(function () {
+    const dropzone      = document.getElementById('dropzone');
+    const fileInput     = document.getElementById('file-input');
+    const fileInfoCard  = document.getElementById('file-info-card');
+    const fileInfoIcon  = document.getElementById('file-info-icon');
+    const fileInfoName  = document.getElementById('file-info-name');
+    const fileInfoMeta  = document.getElementById('file-info-meta');
+    const fileClearBtn  = document.getElementById('file-clear-btn');
+    const uploadOptions = document.getElementById('upload-options');
+    const uploadStats   = document.getElementById('upload-stats');
+    const statsGrid     = document.getElementById('stats-grid');
+    const csvOptions    = document.getElementById('csv-options');
+    const csvSeparator  = document.getElementById('csv-separator');
+    const previewEmpty  = document.getElementById('preview-empty');
+    const previewContent= document.getElementById('preview-content');
+    const previewError  = document.getElementById('preview-error');
+    const previewErrorMsg=document.getElementById('preview-error-msg');
+    const previewActions= document.getElementById('preview-actions');
+    const btnCopy       = document.getElementById('btn-copy');
+    const viewBtns      = document.querySelectorAll('.view-btn');
+
+    let currentFileText = '';
+    let currentFileType = '';
+    let currentView     = 'formatted';
+
+    // --- Dropzone kliknięcie ---
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    // --- Drag & Drop ---
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) handleFile(file);
+    });
+
+    // --- Input file ---
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    // --- Separator CSV ---
+    csvSeparator.addEventListener('change', () => {
+        if (currentFileType === 'csv') renderPreview();
+    });
+
+    // --- Przełącznik widoku ---
+    viewBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            viewBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentView = btn.dataset.view;
+            if (currentFileText) renderPreview();
+        });
+    });
+
+    // --- Wyczyść plik ---
+    fileClearBtn.addEventListener('click', clearFile);
+
+    // --- Kopiuj do schowka ---
+    btnCopy.addEventListener('click', () => {
+        navigator.clipboard.writeText(currentFileText).then(() => {
+            btnCopy.textContent = '✅ Skopiowano';
+            setTimeout(() => { btnCopy.textContent = '📋 Kopiuj'; }, 2000);
+        });
+    });
+
+    function handleFile(file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'json' && ext !== 'csv') {
+            showError('Nieobsługiwany format pliku. Wybierz plik .json lub .csv');
+            return;
+        }
+
+        currentFileType = ext;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentFileText = e.target.result;
+            showFileInfo(file);
+            showOptions(ext);
+            renderPreview();
+        };
+        reader.readAsText(file, 'UTF-8');
+    }
+
+    function showFileInfo(file) {
+        fileInfoIcon.textContent = currentFileType === 'json' ? '🗂️' : '📊';
+        fileInfoName.textContent = file.name;
+        fileInfoMeta.textContent = `${formatBytes(file.size)} · ${currentFileType.toUpperCase()}`;
+        fileInfoCard.style.display = 'flex';
+    }
+
+    function showOptions(ext) {
+        uploadOptions.style.display = 'block';
+        csvOptions.style.display = ext === 'csv' ? 'flex' : 'none';
+        previewActions.style.display = 'flex';
+    }
+
+    function clearFile() {
+        currentFileText = '';
+        currentFileType = '';
+        fileInput.value = '';
+        fileInfoCard.style.display  = 'none';
+        uploadOptions.style.display = 'none';
+        uploadStats.style.display   = 'none';
+        previewContent.style.display= 'none';
+        previewError.style.display  = 'none';
+        previewActions.style.display= 'none';
+        previewEmpty.style.display  = 'flex';
+    }
+
+    function renderPreview() {
+        previewEmpty.style.display   = 'none';
+        previewError.style.display   = 'none';
+        previewContent.style.display = 'block';
+
+        if (currentView === 'raw') {
+            renderRaw();
+            return;
+        }
+
+        if (currentFileType === 'json') renderJSON();
+        else renderCSV();
+    }
+
+    function renderRaw() {
+        previewContent.innerHTML = `<div class="raw-viewer">${escapeHtml(currentFileText)}</div>`;
+        updateStats({ rows: currentFileText.split('\n').length, chars: currentFileText.length });
+    }
+
+    function renderJSON() {
+        try {
+            const parsed = JSON.parse(currentFileText);
+            previewContent.innerHTML = `<div class="json-viewer">${syntaxHighlightJSON(JSON.stringify(parsed, null, 2))}</div>`;
+
+            const rowCount = Array.isArray(parsed) ? parsed.length : (typeof parsed === 'object' ? Object.keys(parsed).length : 1);
+            const keyCount = Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object'
+                ? Object.keys(parsed[0]).length
+                : (typeof parsed === 'object' ? Object.keys(parsed).length : 1);
+            updateStats({ rows: rowCount, cols: keyCount, chars: currentFileText.length, type: 'JSON' });
+        } catch (err) {
+            showError(`Błąd parsowania JSON: ${err.message}`);
+        }
+    }
+
+    function renderCSV() {
+        const sep = csvSeparator.value === '\\t' ? '\t' : csvSeparator.value;
+        const lines = currentFileText.trim().split(/\r?\n/).filter(l => l.trim() !== '');
+
+        if (lines.length === 0) {
+            showError('Plik CSV jest pusty.');
+            return;
+        }
+
+        const headers = parseCSVLine(lines[0], sep);
+        const dataRows = lines.slice(1).map(l => parseCSVLine(l, sep));
+
+        const maxPreview = 500;
+        const displayed = dataRows.slice(0, maxPreview);
+        const truncated = dataRows.length > maxPreview;
+
+        let html = '<div class="csv-table-wrapper"><table class="csv-table"><thead><tr>';
+        html += `<th class="row-num">#</th>`;
+        headers.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
+        html += '</tr></thead><tbody>';
+
+        displayed.forEach((row, i) => {
+            html += `<tr><td class="row-num">${i + 1}</td>`;
+            headers.forEach((_, ci) => {
+                html += `<td title="${escapeHtml(row[ci] ?? '')}">${escapeHtml(row[ci] ?? '')}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+        if (truncated) {
+            html += `<p style="color:#888;font-size:0.8rem;margin-top:8px;text-align:center;">Wyświetlono pierwsze ${maxPreview} z ${dataRows.length} wierszy</p>`;
+        }
+
+        previewContent.innerHTML = html;
+        updateStats({ rows: dataRows.length, cols: headers.length, chars: currentFileText.length, type: 'CSV' });
+    }
+
+    function parseCSVLine(line, sep) {
+        const result = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+                if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+                else inQuotes = !inQuotes;
+            } else if (ch === sep && !inQuotes) {
+                result.push(cur);
+                cur = '';
+            } else {
+                cur += ch;
+            }
+        }
+        result.push(cur);
+        return result;
+    }
+
+    function updateStats(info) {
+        uploadStats.style.display = 'block';
+        const items = [
+            { value: info.rows ?? '—',  label: info.type === 'CSV' ? 'Wierszy danych' : 'Elementów' },
+            { value: info.cols ?? '—',  label: info.type === 'CSV' ? 'Kolumn'         : 'Kluczy'    },
+            { value: formatBytes(info.chars ?? 0), label: 'Rozmiar tekstu' },
+            { value: info.type ?? currentFileType.toUpperCase(), label: 'Format pliku' },
+        ];
+        statsGrid.innerHTML = items.map(it =>
+            `<div class="stat-item"><div class="stat-value">${it.value}</div><div class="stat-label">${it.label}</div></div>`
+        ).join('');
+    }
+
+    function showError(msg) {
+        previewContent.style.display  = 'none';
+        previewEmpty.style.display    = 'none';
+        previewError.style.display    = 'flex';
+        previewErrorMsg.textContent   = msg;
+        uploadStats.style.display     = 'none';
+    }
+
+    function syntaxHighlightJSON(json) {
+        return escapeHtml(json).replace(
+            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+            (match) => {
+                if (/^"/.test(match)) {
+                    return /:$/.test(match)
+                        ? `<span class="json-key">${match}</span>`
+                        : `<span class="json-string">${match}</span>`;
+                }
+                if (/true|false/.test(match)) return `<span class="json-bool">${match}</span>`;
+                if (/null/.test(match))       return `<span class="json-null">${match}</span>`;
+                return `<span class="json-number">${match}</span>`;
+            }
+        );
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatBytes(bytes) {
+        if (bytes < 1024)       return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+}());
