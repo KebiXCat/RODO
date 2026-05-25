@@ -4,3 +4,4 @@ __pycache__/
 venv/
 TEST_DATA/
 databases/
+.DS_STORE

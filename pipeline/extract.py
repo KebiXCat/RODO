@@ -10,7 +10,7 @@ def extract(link, source):
     except Exception as e:
         print(f"Błąd wczytania: {e}" )
         return None
-    df["timeOfProccesing"] = datetime.now()
+    df["createad_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     df["source"] = source
     return df
 def ingestIntoSql(link, source):
@@ -22,6 +22,6 @@ def ingestIntoSql(link, source):
     print(f"Czas Wczytania: {datetime.now()}")
     print(f"Kolumny: {list(df.columns)}")
     print(df.head())
-
-ingestIntoSql("TEST_DATA/test3.csv", "csv")
+if __name__ == "__main__":
+    ingestIntoSql("TEST_DATA/test3.csv", "csv")
 
