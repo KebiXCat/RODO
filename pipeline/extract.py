@@ -1,6 +1,7 @@
 import pandas as pd
 from datetime import datetime
 import sqlite3
+import uuid
 def extract(link, source):
     try:
         if(source == "csv"):
@@ -10,8 +11,11 @@ def extract(link, source):
     except Exception as e:
         print(f"Błąd wczytania: {e}" )
         return None
-    df["createad_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    allColumns = ['first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent', 'PESEL']
+    df = df[allColumns]
+    df["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     df["source"] = source
+    df["uuid"] = [str(uuid.uuid4()) for i in range(len(df))]
     return df
 def ingestIntoSql(link, source):
     df = extract(link, source)

@@ -1,6 +1,7 @@
 from extract import extract
 import pandas as pd
 import phonenumbers
+import sqlite3
 def checkTypes(df):
     if df["first_name"].dtype != 'str':
         df["first_name"] = df["first_name"].astype('str')
@@ -15,15 +16,17 @@ def checkTypes(df):
     return df
 def checkPhone(phone):
     try:
-        parsed = phonenumbers.parse(phone)
+        parsed = phonenumbers.parse(phone, "PL")
         return phonenumbers.is_valid_number(parsed) & phonenumbers.is_possible_number(parsed)
     except:
         return False
     
 def format_phone(x):
     try:
+        if not x.startswith("+"):
+            x = "+48" + x.replace(" ", "").replace("-", "")
         parsed = phonenumbers.parse(x, "PL")
-        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
     except:
         return x
     
@@ -41,12 +44,13 @@ def normalise(df):
     df["birth_date"] = df["birth_date"].dt.strftime("%d-%m-%Y")
 
     return df
-def validate(link, source):
+def transform(link, source):
     df = extract(link,source)
-    allColumns = {'first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent'}
+    allColumns = {'first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent', 'PESEL'}
     mustHaveColumns = ['email', 'phone', 'purpose', 'consent']
     possiblePurposes = {'rekrutacja', 'marketing', 'obsługa klienta'}
     ## check if columns are fine
+    df = df.reset_index(drop=True)
     if allColumns.issubset(df.columns):
         print("Poprawne kolumny!")
     else:
@@ -82,9 +86,42 @@ def validate(link, source):
     # mark dupliacted data by email + phone
     df.loc[df.duplicated(subset=['email', 'phone']), "status"] = "DUPLICATE"
 
-    #pd.set_option('display.max_columns', None)
-    #print(df.head())
+    pd.set_option('display.max_columns', None)
+    print(df.head())
+
+    print(df.value_counts("status"))
+    print(df.value_counts("reason").drop(""))
+    print(df.isnull().sum())
+    #print invalid records
+    #print(df.loc[df["status"] == 'INVALID'])
+    return df
+def getClean(link, source):
+    df = transform(link, source)
+    clean_columns = ['uuid', 'email', 'phone', 'purpose', 'consent', 'status', 'reason', 'source', 'created_at']
+    df = df[clean_columns]
     return df
 
-validate("TEST_DATA/test6.csv", "csv")
+def getKeys(link, source):
+    df = transform(link, source)
+    keys_columns = ['uuid', 'first_name', 'last_name', 'PESEL', 'birth_date']
+    df = df[keys_columns]
+    return df
+def IngestIntoSqlFull(link, source):
+    df = transform(link, source)
+    connection = sqlite3.connect("databases/full_records.db")
+    df.to_sql("databases/full_records", connection, if_exists="append")
+def IngestIntoSqlClean(link, source):
+    df = getClean(link, source)
+    connection = sqlite3.connect("databases/clean_records.db")
+    df.to_sql("databases/clean_records", connection, if_exists="append")
+def IngestIntoSqlKeys(link, source):
+    df = getKeys(link, source)
+    connection = sqlite3.connect("databases/keys_records.db")
+    df.to_sql("databases/keys_records", connection, if_exists="append")
+
+path = "TEST_DATA/faker.csv"
+source = "csv"
+IngestIntoSqlClean(path, source)
+IngestIntoSqlKeys(path, source)
+IngestIntoSqlFull(path, source)
 

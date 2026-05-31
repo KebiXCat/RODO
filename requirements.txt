@@ -1,1 +1,1 @@
-pandas fastapi uvicorn requests python-dotenv phonenumbers
+pandas phonenumbers
