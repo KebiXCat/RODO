@@ -1,7 +1,7 @@
 from extract import extract
 import pandas as pd
 import phonenumbers
-import sqlite3
+from load import loadIntoAzure
 def checkTypes(df):
     if df["first_name"].dtype != 'str':
         df["first_name"] = df["first_name"].astype('str')
@@ -95,33 +95,27 @@ def transform(link, source):
     #print invalid records
     #print(df.loc[df["status"] == 'INVALID'])
     return df
-def getClean(link, source):
-    df = transform(link, source)
+def getClean(df):
     clean_columns = ['uuid', 'email', 'phone', 'purpose', 'consent', 'status', 'reason', 'source', 'created_at']
     df = df[clean_columns]
     return df
-
-def getKeys(link, source):
-    df = transform(link, source)
+def getKeys(df):
     keys_columns = ['uuid', 'first_name', 'last_name', 'PESEL', 'birth_date']
     df = df[keys_columns]
     return df
-def IngestIntoSqlFull(link, source):
-    df = transform(link, source)
-    connection = sqlite3.connect("databases/full_records.db")
-    df.to_sql("databases/full_records", connection, if_exists="append")
-def IngestIntoSqlClean(link, source):
-    df = getClean(link, source)
-    connection = sqlite3.connect("databases/clean_records.db")
-    df.to_sql("databases/clean_records", connection, if_exists="append")
-def IngestIntoSqlKeys(link, source):
-    df = getKeys(link, source)
-    connection = sqlite3.connect("databases/keys_records.db")
-    df.to_sql("databases/keys_records", connection, if_exists="append")
+def IngestIntoSqlFull(df):
+    loadIntoAzure('full_records', df)
+def IngestIntoSqlClean(df):
+    df = getClean(df)
+    loadIntoAzure('clean_records', df)
+def IngestIntoSqlKeys(df):
+    df = getKeys(df)
+    loadIntoAzure('keys', df)
 
 path = "TEST_DATA/faker.csv"
 source = "csv"
-IngestIntoSqlClean(path, source)
-IngestIntoSqlKeys(path, source)
-IngestIntoSqlFull(path, source)
+df = transform(path, source)
+IngestIntoSqlClean(df)
+IngestIntoSqlKeys(df)
+IngestIntoSqlFull(df)
 

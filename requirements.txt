@@ -1,1 +1,1 @@
-pandas phonenumbers
+pandas phonenumbers dotenv sqlalchemy

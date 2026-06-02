@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime
-import sqlite3
 import uuid
+from load import loadIntoAzure
 def extract(link, source):
     try:
         if(source == "csv"):
@@ -19,13 +19,12 @@ def extract(link, source):
     return df
 def ingestIntoSql(link, source):
     df = extract(link, source)
-    connection = sqlite3.connect("raw_records.db")
-    df.to_sql("raw_records", connection, if_exists="append")
+    loadIntoAzure('raw_records', df)
     print("Raport z wczytania: ")
     print(f"Źródło: {source}")
     print(f"Czas Wczytania: {datetime.now()}")
     print(f"Kolumny: {list(df.columns)}")
     print(df.head())
 if __name__ == "__main__":
-    ingestIntoSql("TEST_DATA/test3.csv", "csv")
+    ingestIntoSql("TEST_DATA/faker.csv", "csv")
 
