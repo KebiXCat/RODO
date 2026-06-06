@@ -1,7 +1,7 @@
-from extract import extract
+from pipeline.extract import extract
 import pandas as pd
 import phonenumbers
-from load import loadIntoAzure
+from pipeline.load import loadIntoAzure
 def checkTypes(df):
     if df["first_name"].dtype != 'str':
         df["first_name"] = df["first_name"].astype('str')
@@ -111,11 +111,12 @@ def IngestIntoSqlClean(df):
 def IngestIntoSqlKeys(df):
     df = getKeys(df)
     loadIntoAzure('keys', df)
-
-path = "TEST_DATA/faker.csv"
-source = "csv"
-df = transform(path, source)
-IngestIntoSqlClean(df)
-IngestIntoSqlKeys(df)
-IngestIntoSqlFull(df)
-
+def IngestEverything(df):
+    IngestIntoSqlClean(df)
+    IngestIntoSqlKeys(df)
+    IngestIntoSqlFull(df)
+if __name__ == "__main__":
+    path = "TEST_DATA/faker.csv"
+    source = "csv"
+    df = transform(path, source)
+    IngestEverything(df)

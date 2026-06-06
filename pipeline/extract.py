@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime
 import uuid
-from load import loadIntoAzure
+from pipeline.load import loadIntoAzure
 def extract(link, source):
     try:
         if(source == "csv"):
@@ -11,6 +11,7 @@ def extract(link, source):
     except Exception as e:
         print(f"Błąd wczytania: {e}" )
         return None
+    print(f"path: {link}, source: {source}")
     allColumns = ['first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent', 'PESEL']
     df = df[allColumns]
     df["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
