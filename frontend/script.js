@@ -617,6 +617,8 @@ document.addEventListener('click', function(e) {
     let currentFileText = '';
     let currentFileType = '';
     let currentView     = 'formatted';
+    let currentFile     = null;
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
     // --- Dropzone kliknięcie ---
     dropzone.addEventListener('click', () => fileInput.click());
@@ -665,13 +667,99 @@ document.addEventListener('click', function(e) {
         });
     });
 
+    const btnSendPipeline = document.createElement('button');
+    btnSendPipeline.type = 'button';
+    btnSendPipeline.textContent = '📤 Prześlij do bazy';
+    btnSendPipeline.style.cssText = 'padding:14px 32px;background:#4a9eff;border:none;color:#000;border-radius:8px;cursor:pointer;font-weight:700;font-size:1rem;display:none;letter-spacing:0.3px;';
+    previewActions.appendChild(btnSendPipeline);
+
+    const pipelineStatus = document.createElement('div');
+    pipelineStatus.style.cssText = 'display:none;margin-top:16px;padding:28px 32px;border-radius:12px;text-align:center;font-size:1.4rem;font-weight:700;letter-spacing:0.3px;';
+    const uploadPanel = document.getElementById('upload-options').parentElement;
+    uploadPanel.appendChild(pipelineStatus);
+
+    if (!document.getElementById('spin-style')) {
+        const s = document.createElement('style');
+        s.id = 'spin-style';
+        s.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+        document.head.appendChild(s);
+    }
+
+    function showPipelineStatus(type) {
+        pipelineStatus.style.display    = 'block';
+        pipelineStatus.style.border     = '';
+        pipelineStatus.style.background = '';
+        pipelineStatus.style.color      = '';
+
+        if (type === 'loading') {
+            pipelineStatus.style.background = 'rgba(74,158,255,0.12)';
+            pipelineStatus.style.border     = '2px solid #4a9eff';
+            pipelineStatus.style.color      = '#4a9eff';
+            pipelineStatus.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:10px;">⏳</span> Przesyłanie do bazy...';
+        } else if (type === 'success') {
+            pipelineStatus.style.background = 'rgba(76,175,80,0.12)';
+            pipelineStatus.style.border     = '2px solid #4caf50';
+            pipelineStatus.style.color      = '#4caf50';
+            pipelineStatus.innerHTML = '✅ Dodane do bazy!';
+        } else if (type === 'error') {
+            pipelineStatus.style.background = 'rgba(244,67,54,0.12)';
+            pipelineStatus.style.border     = '2px solid #f44336';
+            pipelineStatus.style.color      = '#f44336';
+            pipelineStatus.innerHTML = '❌ Błąd wysyłania';
+        } else {
+            pipelineStatus.style.display = 'none';
+        }
+    }
+
+    btnSendPipeline.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (currentFile) sendToPipeline(currentFile);
+    });
+
+    async function sendToPipeline(file){
+        const url = "http://localhost:8000/pipeline/run";
+        btnSendPipeline.disabled = true;
+        showPipelineStatus('loading');
+        try{
+            const formData = new FormData();
+            formData.append("file", file);
+            const response = await fetch(url, {
+                method: "POST",
+                body: formData
+            });
+
+            if(!response.ok){
+                throw new Error(`Response status: ${response.status}`);
+            }
+            showPipelineStatus('success');
+            setTimeout(() => {
+                showPipelineStatus('hidden');
+                btnSendPipeline.disabled = false;
+            }, 4000);
+        }
+        catch(error){
+            console.error(error.message);
+            showPipelineStatus('error');
+            setTimeout(() => {
+                showPipelineStatus('hidden');
+                btnSendPipeline.disabled = false;
+            }, 4000);
+        }
+    }
     function handleFile(file) {
+        if (file.size > MAX_FILE_SIZE) {
+            showError(`Plik jest za duży (${formatBytes(file.size)}). Maksymalny rozmiar to 50 MB.`);
+            return;
+        }
+
         const ext = file.name.split('.').pop().toLowerCase();
         if (ext !== 'json' && ext !== 'csv') {
             showError('Nieobsługiwany format pliku. Wybierz plik .json lub .csv');
             return;
         }
 
+        currentFile     = file;
         currentFileType = ext;
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -694,11 +782,14 @@ document.addEventListener('click', function(e) {
         uploadOptions.style.display = 'block';
         csvOptions.style.display = ext === 'csv' ? 'flex' : 'none';
         previewActions.style.display = 'flex';
+        btnSendPipeline.style.display = '';
     }
 
     function clearFile() {
         currentFileText = '';
         currentFileType = '';
+        currentFile     = null;
+        btnSendPipeline.style.display = 'none';
         fileInput.value = '';
         fileInfoCard.style.display  = 'none';
         uploadOptions.style.display = 'none';

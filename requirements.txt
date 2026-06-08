@@ -1,1 +1,10 @@
-pandas phonenumbers dotenv sqlalchemy fastapi uvicorn python-multipart
+pandas 
+phonenumbers 
+dotenv 
+sqlalchemy 
+fastapi 
+fastapi[standard]
+uvicorn 
+pwdlib
+pwdlib[argon2]
+pyjwt
