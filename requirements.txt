@@ -8,3 +8,4 @@ uvicorn
 pwdlib
 pwdlib[argon2]
 pyjwt
+slowapi
