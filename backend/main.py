@@ -34,7 +34,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    #response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; img-src 'self' data: fastapi.tiangolo.com"
     return response
 @app.get("/records")
 @limiter.limit("30/minute")
@@ -151,3 +151,11 @@ def refresh(request: Request, token: str = Depends(oauth2_scheme)):
     payload = verify_token(token)
     new_token = create_access_token({"sub": payload["sub"], "role" : payload.get("role", "user")})
     return {"access_token" : new_token, "token_type" : "bearer"}
+@app.get("/my-data")
+@limiter.limit("10/minute")
+def get_my_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    email = current_user["email"]
+    query = "SELECT * from clean_records WHERE email = ?"
+    df = pd.read_sql(query, engine, params=[(email,)])
+    df = df.fillna("")
+    return df.to_dict(orient="records")

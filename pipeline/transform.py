@@ -1,7 +1,7 @@
 from pipeline.extract import extract
 import pandas as pd
 import phonenumbers
-from pipeline.load import loadIntoAzure
+from pipeline.load import loadIntoAzure, get_engine
 def checkTypes(df):
     if df["first_name"].dtype != 'str':
         df["first_name"] = df["first_name"].astype('str')
@@ -46,6 +46,7 @@ def normalise(df):
     return df
 def transform(link, source):
     df = extract(link,source)
+    #print(df["purpose"].unique())
     allColumns = {'first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent', 'PESEL'}
     mustHaveColumns = ['email', 'phone', 'purpose', 'consent']
     possiblePurposes = {'rekrutacja', 'marketing', 'obsługa klienta'}
@@ -84,8 +85,8 @@ def transform(link, source):
     # print(df.loc[~df["purpose"].isin(possiblePurposes), "purpose"])
 
     # mark dupliacted data by email + phone
-    df.loc[df.duplicated(subset=['email', 'phone']), "status"] = "DUPLICATE"
-
+    df.loc[df.duplicated(subset=['email', 'phone', 'purpose']), "status"] = "DUPLICATE"
+    df = mark_db_duplicates(df)
     pd.set_option('display.max_columns', None)
     print(df.head())
 
@@ -93,8 +94,29 @@ def transform(link, source):
     print(df.value_counts("reason").drop(""))
     print(df.isnull().sum())
     #print invalid records
-    #print(df.loc[df["status"] == 'INVALID'])
+    #print(df.loc[df["status"] == 'VALID'])
     return df
+def mark_db_duplicates(df):
+    engine = get_engine()
+    query = """
+        SELECT email,phone, purpose, consent
+        FROM (
+            SELECT email, phone, purpose, consent,
+            ROW_NUMBER() OVER (PARTITION BY email, phone, purpose ORDER BY created_at DESC) as rn
+            FROM clean_records
+        ) t
+        WHERE rn = 1
+    """
+    try:
+        existing = pd.read_sql(query, engine)
+    except Exception:
+        return df
+    merged = pd.merge(df, existing, on=['email', 'phone', 'purpose'], how='left', suffixes=('', '_db'))
+    merged.loc[(merged["status"] == "VALID") &
+               (merged["consent_db"].notna()) & 
+               (merged["consent_db"] == merged["consent"]), "status"] = "DUPLICATE"
+    merged = merged.drop(columns=["consent_db"])
+    return merged
 def getClean(df):
     clean_columns = ['uuid', 'email', 'phone', 'purpose', 'consent', 'status', 'reason', 'source', 'created_at']
     df = df[clean_columns]

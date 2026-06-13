@@ -5,9 +5,9 @@ from pipeline.load import loadIntoAzure
 def extract(link, source):
     try:
         if(source == "csv"):
-            df = pd.read_csv(link)
+            df = pd.read_csv(link, encoding='utf-8')
         elif(source == "json"):
-            df = pd.read_json(link)
+            df = pd.read_json(link, encoding='utf-8')
     except Exception as e:
         print(f"Błąd wczytania: {e}" )
         return None
