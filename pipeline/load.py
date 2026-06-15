@@ -16,6 +16,7 @@ def get_engine():
     return engine
 def loadIntoAzure(name, df):
     engine = get_engine()
-    df['uuid'] = df['uuid'].astype(str)
+    if 'uuid' in df.columns:
+        df['uuid'] = df['uuid'].astype(str)
     nvarchar_cols = {col: types.NVARCHAR(length=255) for col in df.select_dtypes(include='object').columns}
     df.to_sql(name, engine, if_exists='append', index=False, dtype=nvarchar_cols)

@@ -125,8 +125,6 @@ def getKeys(df):
     keys_columns = ['uuid', 'first_name', 'last_name', 'PESEL', 'birth_date']
     df = df[keys_columns]
     return df
-def IngestIntoSqlFull(df):
-    loadIntoAzure('full_records', df)
 def IngestIntoSqlClean(df):
     df = getClean(df)
     loadIntoAzure('clean_records', df)
@@ -136,7 +134,6 @@ def IngestIntoSqlKeys(df):
 def IngestEverything(df):
     IngestIntoSqlClean(df)
     IngestIntoSqlKeys(df)
-    IngestIntoSqlFull(df)
 if __name__ == "__main__":
     path = "TEST_DATA/faker.csv"
     source = "csv"

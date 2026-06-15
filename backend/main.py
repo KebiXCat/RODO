@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pipeline.load import get_engine, loadIntoAzure
-from pipeline.transform import transform, IngestEverything
+from pipeline.transform import transform, IngestEverything, checkPhone, format_phone
 from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from backend.auth import get_current_user, get_password_hash, verify_password, create_access_token, require_role, verify_token
@@ -12,6 +12,7 @@ from datetime import datetime
 from backend.auth import blacklisted_tokens, oauth2_scheme
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
 limiter = Limiter(key_func=lambda request: request.client.host)
 app = FastAPI()
@@ -151,11 +152,120 @@ def refresh(request: Request, token: str = Depends(oauth2_scheme)):
     payload = verify_token(token)
     new_token = create_access_token({"sub": payload["sub"], "role" : payload.get("role", "user")})
     return {"access_token" : new_token, "token_type" : "bearer"}
+def fetch_my_data(email: str):
+    query = """
+    SELECT first_name, last_name, PESEL, birth_date, email, phone, purpose, consent
+    FROM clean_records c
+    JOIN keys k ON c.uuid = k.uuid
+    WHERE email = ?"""
+    df = pd.read_sql(query, engine, params=[(email,)])
+    df = df.fillna("")
+    return df
 @app.get("/my-data")
 @limiter.limit("10/minute")
 def get_my_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
-    email = current_user["email"]
-    query = "SELECT * from clean_records WHERE email = ?"
-    df = pd.read_sql(query, engine, params=[(email,)])
-    df = df.fillna("")
+    df = fetch_my_data(email)
     return df.to_dict(orient="records")
+@app.get("/change-data")
+@limiter.limit("10/minute")
+def change_my_data(request: Request, email: str, first_name: str= None, last_name: str=None, PESEL: str=None, birth_date: str = None, phone: str = None, current_user = Depends(require_role(["admin"]))):
+    if first_name or last_name or PESEL or birth_date:
+        updates = []
+        params = {}
+        if first_name:
+            updates.append("first_name = :first_name")
+            params["first_name"] = first_name
+        if last_name:
+            updates.append("last_name = :last_name")
+            params["last_name"] = last_name
+        if PESEL:
+            updates.append("PESEL = :PESEL")
+            params["PESEL"] = PESEL
+        if birth_date:
+            updates.append("birth_date = :birth_date")
+            birth_date= pd.to_datetime(birth_date).strftime("%d-%m-%Y")
+            params["birth_date"] = birth_date
+        params["email"] = email
+        query = f"""
+        UPDATE keys SET {", ".join(updates)} 
+        FROM keys k
+        JOIN clean_records cr ON k.uuid = cr.uuid
+        WHERE cr.email = :email
+        """
+        with engine.connect() as conn:
+            conn.execute(text(query), params)
+            conn.commit()
+    if phone:
+        params = {}
+        params["email"] = email
+        if not checkPhone(phone):
+            raise HTTPException(status_code=400, detail="Niepoprawny numer telefonu")
+        phone = format_phone(phone)
+        params["phone"] = phone
+        query = f"""
+        UPDATE clean_records SET phone = :phone
+        WHERE email = :email
+        """
+        with engine.connect() as conn:
+            conn.execute(text(query), params)
+            conn.commit()
+    return {"message" : "Zaktualizowano dane"}
+@app.delete("/records")
+@limiter.limit("10/minute")
+def delete_my_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    query1 = """
+    DELETE FROM clean_records WHERE email = :email
+    """
+    query2 = """
+    DELETE FROM raw_records WHERE email = :email
+    """
+    query3 = """
+    DELETE k FROM keys k
+    JOIN clean_records c ON k.uuid = c.uuid
+    WHERE email = :email
+    """
+    with engine.connect() as conn:
+        conn.execute(text(query1), {"email" : email})
+        conn.execute(text(query2),{"email" : email})
+        conn.execute(text(query3), {"email" : email})
+        conn.commit()
+    return {"message" : "Usunięto dane"}
+@app.get("/export_data")
+@limiter.limit("10/minute")
+def export_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    df = fetch_my_data(email)
+    df_csv = df.to_csv(index=False)
+    return Response(
+        content=df_csv,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=data.csv"
+        }
+    )
+@app.post("/change_consent")
+@limiter.limit("10/minute")
+def change_consent(request: Request, email: str, purpose: str, consent: bool, current_user = Depends(require_role(["admin"]))):
+    query = """
+        SELECT TOP 1 * from clean_records
+        WHERE email = ?
+        ORDER BY created_at DESC
+    """
+    df = pd.read_sql(query, engine, params=[(email, )])
+    df["purpose"] = purpose
+    df["consent"] = consent
+    df["source"] = 'self'
+    df["status"] = "VALID"
+    df["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    loadIntoAzure('clean_records', df)
+    return {"message": "Zmieniono zgodę"}
+@app.post("/freeze")
+@limiter.limit("10/minute")
+def freeze(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    with engine.connect() as conn:
+        query = """
+            UPDATE clean_records SET processing_frozen = 1
+            WHERE email = :email
+        """
+        conn.execute(text(query), {"email" :  email})
+        conn.commit()
+    return {"message" : "Przetwarzanie zamrożone"}
