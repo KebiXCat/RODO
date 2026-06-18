@@ -2,6 +2,7 @@ from pipeline.extract import extract
 import pandas as pd
 import phonenumbers
 from pipeline.load import loadIntoAzure, get_engine
+from sqlalchemy import text
 def checkTypes(df):
     if df["first_name"].dtype != 'str':
         df["first_name"] = df["first_name"].astype('str')
@@ -41,7 +42,7 @@ def normalise(df):
     df["phone"] = df["phone"].apply(format_phone)
     
     df["birth_date"] = pd.to_datetime(df["birth_date"], errors='coerce')
-    df["birth_date"] = df["birth_date"].dt.strftime("%d-%m-%Y")
+    df["birth_date"] = df["birth_date"].dt.date
 
     return df
 def transform(link, source):
@@ -86,7 +87,12 @@ def transform(link, source):
 
     # mark dupliacted data by email + phone
     df.loc[df.duplicated(subset=['email', 'phone', 'purpose']), "status"] = "DUPLICATE"
-    df = mark_db_duplicates(df)
+    engine = get_engine()
+    df = mark_db_duplicates(df, engine)
+    with engine.connect() as conn:
+        result = conn.execute(text("SElECT MAX(id) FROM raw_records"))
+        id = result.scalar()
+    df["id"] = range(id-len(df)+1, id+1)
     pd.set_option('display.max_columns', None)
     print(df.head())
 
@@ -96,8 +102,7 @@ def transform(link, source):
     #print invalid records
     #print(df.loc[df["status"] == 'VALID'])
     return df
-def mark_db_duplicates(df):
-    engine = get_engine()
+def mark_db_duplicates(df, engine):
     query = """
         SELECT email,phone, purpose, consent
         FROM (
@@ -118,11 +123,11 @@ def mark_db_duplicates(df):
     merged = merged.drop(columns=["consent_db"])
     return merged
 def getClean(df):
-    clean_columns = ['uuid', 'email', 'phone', 'purpose', 'consent', 'status', 'reason', 'source', 'created_at']
+    clean_columns = ['id', 'email', 'phone', 'purpose', 'consent', 'status', 'reason', 'source', 'created_at']
     df = df[clean_columns]
     return df
 def getKeys(df):
-    keys_columns = ['uuid', 'first_name', 'last_name', 'PESEL', 'birth_date']
+    keys_columns = ['id', 'first_name', 'last_name', 'PESEL', 'birth_date']
     df = df[keys_columns]
     return df
 def IngestIntoSqlClean(df):

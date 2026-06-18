@@ -1,6 +1,5 @@
 import pandas as pd
 from datetime import datetime
-import uuid
 from pipeline.load import loadIntoAzure
 def extract(link, source):
     try:
@@ -14,16 +13,16 @@ def extract(link, source):
     print(f"path: {link}, source: {source}")
     allColumns = ['first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent', 'PESEL']
     df = df[allColumns]
-    df["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    df["created_at"] = datetime.now().replace(microsecond=0)
+    df["birth_date"] = pd.to_datetime(df["birth_date"]).dt.date
     df["source"] = source
-    df["uuid"] = [str(uuid.uuid4()) for i in range(len(df))]
+    ingestIntoSql(df, source)
     return df
-def ingestIntoSql(link, source):
-    df = extract(link, source)
+def ingestIntoSql(df, source):
     loadIntoAzure('raw_records', df)
     print("Raport z wczytania: ")
     print(f"Źródło: {source}")
-    print(f"Czas Wczytania: {datetime.now()}")
+    print(f"Czas Wczytania: {datetime.now().replace(microsecond=0)}")
     print(f"Kolumny: {list(df.columns)}")
     print(df.head())
 if __name__ == "__main__":
