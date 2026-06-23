@@ -12,7 +12,7 @@
 const Auth = (function () {
     const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
         ? 'http://localhost:8000'
-        : 'https://rodo-mawb.onrender.com';
+        : 'https://rodo-1.onrender.com';
 
     const getAccess  = () => localStorage.getItem('access_token');
     const getRefresh = () => localStorage.getItem('refresh_token');
@@ -703,7 +703,7 @@ const Auth = (function () {
 (function () {
     const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
         ? 'http://localhost:8000'
-        : 'https://rodo-mawb.onrender.com';
+        : 'https://rodo-1.onrender.com';
 
     const emailInput   = document.getElementById('auth-email');
     const passInput    = document.getElementById('auth-password');

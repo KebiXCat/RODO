@@ -133,6 +133,7 @@ def login_user(request: Request, form_data: OAuth2PasswordRequestForm = Depends(
     try:
         df = pd.read_sql("SELECT * FROM users WHERE email = ?", engine, params=[(email,)])
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail="Błąd serwera")
     if len(df) == 0:
         raise HTTPException(status_code=401, detail="Niepoprawny email lub hasło")
