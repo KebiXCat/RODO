@@ -9,3 +9,4 @@ pwdlib
 pwdlib[argon2]
 pyjwt
 slowapi
+pyodbc
