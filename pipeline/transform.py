@@ -93,6 +93,7 @@ def transform(link, source):
         result = conn.execute(text("SElECT MAX(id) FROM raw_records"))
         id = result.scalar()
     df["id"] = range(id-len(df)+1, id+1)
+    df["processing_frozen"] = False
     pd.set_option('display.max_columns', None)
     print(df.head())
 

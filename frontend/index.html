@@ -12,731 +12,22 @@
           content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:8000; font-src 'self'; base-uri 'self'; form-action 'self';">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
     <header class="header">
-        <h1>🔒 GDPR Live Inspector</h1>
-        <p>Interaktywna nauka RODO przez praktykę &nbsp;|&nbsp; <a href="staz-gdpr.pdf" target="_blank" rel="noopener noreferrer" style="color:#a0c4ff;font-size:0.85em;">📄 Plan stażu (PDF)</a></p>
+        <h1 id="brand" title="Powrót do menu głównego">🔒 GDPR Live Inspector</h1>
+        <button class="tab-btn account-btn" data-tab="auth">🔑 Konto</button>
     </header>
 
     <nav class="tabs">
-        <button class="tab-btn active" data-tab="masking">🎭 Maskowanie danych</button>
-        <button class="tab-btn" data-tab="analyzer">📊 Analiza formularza</button>
-        <button class="tab-btn" data-tab="upload">📁 Wczytaj dane</button>
-        <button class="tab-btn" data-tab="flow">🔐 Przepływ danych</button>
-        <button class="tab-btn" data-tab="rights">⚖️ Prawa użytkownika</button>
+        <button class="tab-btn active" data-tab="upload">📁 Wczytaj dane</button>
+        <button class="tab-btn" data-tab="analyst">📊 Panel analityka</button>
+        <button class="tab-btn" data-tab="admin">🛡️ Panel administratora</button>
     </nav>
 
-    <!-- ============ SEKCJA 1: MASKOWANIE - ROZBUDOWANA ============ -->
-    <section id="masking" class="tab-content active">
-        <div class="masking-section">
-            
-            <!-- Interaktywna demonstracja -->
-            <div class="masking-container">
-                <div class="panel">
-                    <h2>📝 Wprowadź dane</h2>
-                    <div class="live-indicator">
-                        <div class="live-dot"></div>
-                        Przetwarzanie w czasie rzeczywistym (client-side)
-                    </div>
-                    
-                    <div class="input-group">
-                        <label>Imię i nazwisko</label>
-                        <input type="text" id="mask-name" placeholder="np. Jan Kowalski">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label>Adres email</label>
-                        <input type="email" id="mask-email" placeholder="np. jan.kowalski@firma.pl">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label>Numer telefonu</label>
-                        <input type="tel" id="mask-phone" placeholder="np. 500 123 456">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label>PESEL</label>
-                        <input type="text" id="mask-pesel" placeholder="np. 85010112345" maxlength="11">
-                    </div>
-
-                    <h3>⚙️ Wybierz technikę ochrony</h3>
-                    <div class="masking-type">
-                        <button class="active" data-type="masking">🎭 Maskowanie</button>
-                        <button data-type="pseudonym">🔄 Pseudonimizacja</button>
-                        <button data-type="anonym">🚫 Anonimizacja</button>
-                    </div>
-                </div>
-
-                <div class="panel">
-                    <h2>🔒 Dane chronione</h2>
-                    
-                    <div class="result-box">
-                        <div class="label">Imię i nazwisko</div>
-                        <div class="value" id="result-name">-</div>
-                    </div>
-                    
-                    <div class="result-box">
-                        <div class="label">Email</div>
-                        <div class="value" id="result-email">-</div>
-                    </div>
-                    
-                    <div class="result-box">
-                        <div class="label">Telefon</div>
-                        <div class="value" id="result-phone">-</div>
-                    </div>
-                    
-                    <div class="result-box">
-                        <div class="label">PESEL</div>
-                        <div class="value" id="result-pesel">-</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SEKCJA EDUKACYJNA -->
-            <div class="education-section">
-                <h2>📚 Zrozum techniki ochrony danych</h2>
-                
-                <div class="technique-tabs">
-                    <div class="technique-tab active" data-technique="masking">
-                        <div class="tab-icon">🎭</div>
-                        <div>Maskowanie</div>
-                    </div>
-                    <div class="technique-tab" data-technique="pseudonym">
-                        <div class="tab-icon">🔄</div>
-                        <div>Pseudonimizacja</div>
-                    </div>
-                    <div class="technique-tab" data-technique="anonym">
-                        <div class="tab-icon">🚫</div>
-                        <div>Anonimizacja</div>
-                    </div>
-                </div>
-
-                <!-- MASKOWANIE -->
-                <div class="technique-content active" id="tech-masking">
-                    <div class="info-box">
-                        <h4>🎭 Czym jest maskowanie danych?</h4>
-                        <p>
-                            <strong>Maskowanie</strong> to technika ukrywania części danych przy zachowaniu ich formatu i struktury. 
-                            Oryginalne dane pozostają nienaruszone w bazie — maskowanie odbywa się "w locie" podczas wyświetlania.
-                        </p>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🖥️ Gdzie odbywa się maskowanie?</h3>
-                    
-                    <div class="architecture-diagram">
-                        <div class="diagram-title">Architektura maskowania danych</div>
-                        <div class="diagram-flow">
-                            <div class="diagram-node">
-                                <div class="node-icon">🗄️</div>
-                                <div class="node-label">Baza danych</div>
-                                <div style="font-size: 0.75rem; color: #4caf50; margin-top: 5px;">Jan Kowalski</div>
-                            </div>
-                            <div class="diagram-arrow animated">→</div>
-                            <div class="diagram-node server highlight">
-                                <div class="node-icon">⚙️</div>
-                                <div class="node-label">SERWER</div>
-                                <div style="font-size: 0.75rem; color: #ffa500; margin-top: 5px;">Maskowanie tutaj!</div>
-                            </div>
-                            <div class="diagram-arrow animated">→</div>
-                            <div class="diagram-node">
-                                <div class="node-icon">🖥️</div>
-                                <div class="node-label">Przeglądarka</div>
-                                <div style="font-size: 0.75rem; color: #ff6b6b; margin-top: 5px;">J** K********</div>
-                            </div>
-                        </div>
-                        
-                        <div class="info-box warning" style="margin-top: 20px;">
-                            <h4>⚠️ Dlaczego maskowanie na serwerze?</h4>
-                            <p>
-                                W produkcyjnych systemach maskowanie <strong>musi</strong> odbywać się po stronie serwera, nie w przeglądarce!
-                                Maskowanie w JavaScript (jak na tej stronie demo) to tylko wizualizacja — prawdziwe dane nigdy nie powinny docierać do frontendu.
-                            </p>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">⏱️ Kiedy odbywa się maskowanie?</h3>
-                    
-                    <div class="process-steps">
-                        <div class="process-step">
-                            <div class="step-number">1</div>
-                            <div class="step-content">
-                                <h4>Zapytanie o dane</h4>
-                                <p>Użytkownik lub system wysyła żądanie pobrania danych (np. <code>GET /users/123</code>)</p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">2</div>
-                            <div class="step-content">
-                                <h4>Sprawdzenie uprawnień (RBAC)</h4>
-                                <p>Serwer sprawdza rolę użytkownika i określa poziom dostępu do danych</p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <h4>Pobranie z bazy</h4>
-                                <p>Dane pobierane są w pełnej formie: <code>{"name": "Jan Kowalski", "pesel": "85010112345"}</code></p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">4</div>
-                            <div class="step-content">
-                                <h4>Maskowanie na podstawie roli</h4>
-                                <p>Serwer stosuje reguły maskowania: <code>{"name": "J** K********", "pesel": "*******2345"}</code></p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">5</div>
-                            <div class="step-content">
-                                <h4>Wysłanie odpowiedzi</h4>
-                                <p>Zamaskowane dane trafiają do przeglądarki — oryginały nigdy nie opuszczają serwera</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">👥 RBAC — Role-Based Access Control</h3>
-                    
-                    <div class="info-box">
-                        <h4>🔐 Czym jest RBAC?</h4>
-                        <p>
-                            <strong>RBAC</strong> (Role-Based Access Control) to model kontroli dostępu, w którym uprawnienia przypisane są do ról, a użytkownicy otrzymują role.
-                            W kontekście maskowania: różne role widzą różny poziom szczegółowości danych.
-                        </p>
-                    </div>
-
-                    <div class="rbac-section">
-                        <div class="rbac-title">Kliknij rolę, aby zobaczyć jak widzi dane "Jan Kowalski, PESEL: 85010112345"</div>
-                        
-                        <div class="rbac-grid">
-                            <div class="rbac-role active" data-role="admin">
-                                <div class="role-header">
-                                    <div class="role-icon">👑</div>
-                                    <div>
-                                        <div class="role-name">Administrator</div>
-                                        <div class="role-level">Pełny dostęp</div>
-                                    </div>
-                                </div>
-                                <div class="rbac-preview">
-                                    <div class="preview-label">Widzi:</div>
-                                    <div class="preview-value">Jan Kowalski</div>
-                                    <div class="preview-value">85010112345</div>
-                                </div>
-                            </div>
-
-                            <div class="rbac-role" data-role="manager">
-                                <div class="role-header">
-                                    <div class="role-icon">👔</div>
-                                    <div>
-                                        <div class="role-name">Manager</div>
-                                        <div class="role-level">Częściowy dostęp</div>
-                                    </div>
-                                </div>
-                                <div class="rbac-preview">
-                                    <div class="preview-label">Widzi:</div>
-                                    <div class="preview-value">Jan Kowalski</div>
-                                    <div class="preview-value masked">*******2345</div>
-                                </div>
-                            </div>
-
-                            <div class="rbac-role" data-role="support">
-                                <div class="role-header">
-                                    <div class="role-icon">🎧</div>
-                                    <div>
-                                        <div class="role-name">Support</div>
-                                        <div class="role-level">Ograniczony dostęp</div>
-                                    </div>
-                                </div>
-                                <div class="rbac-preview">
-                                    <div class="preview-label">Widzi:</div>
-                                    <div class="preview-value masked">J** K********</div>
-                                    <div class="preview-value masked">*******2345</div>
-                                </div>
-                            </div>
-
-                            <div class="rbac-role" data-role="analyst">
-                                <div class="role-header">
-                                    <div class="role-icon">📊</div>
-                                    <div>
-                                        <div class="role-name">Analityk</div>
-                                        <div class="role-level">Tylko statystyki</div>
-                                    </div>
-                                </div>
-                                <div class="rbac-preview">
-                                    <div class="preview-label">Widzi:</div>
-                                    <div class="preview-value hidden">[UKRYTE]</div>
-                                    <div class="preview-value hidden">[UKRYTE]</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🔄 Jak odtworzyć oryginalne dane?</h3>
-                    
-                    <div class="key-lookup">
-                        <p style="color: #ccc; margin-bottom: 15px;">
-                            Przy maskowaniu <strong>oryginalne dane nigdy nie są usuwane</strong> — są tylko ukrywane podczas wyświetlania.
-                        </p>
-                        
-                        <div class="lookup-visual">
-                            <div class="data-box">
-                                <div class="box-label">Zamaskowane</div>
-                                <div class="box-value" style="color: #ff6b6b;">J** K********</div>
-                            </div>
-                            <div style="font-size: 1.5rem; color: #888;">+</div>
-                            <div class="key-box">
-                                <div class="box-label">Uprawnienia</div>
-                                <div class="box-value" style="color: #ffa500;">role: admin</div>
-                            </div>
-                            <div style="font-size: 1.5rem; color: #888;">=</div>
-                            <div class="result-display">
-                                <div class="box-label">Oryginał</div>
-                                <div class="box-value" style="color: #4caf50;">Jan Kowalski</div>
-                            </div>
-                        </div>
-                        
-                        <div class="info-box success" style="margin-top: 20px; text-align: left;">
-                            <h4>✅ Odtworzenie danych</h4>
-                            <p>
-                                W maskowaniu nie ma "klucza deszyfrującego". Oryginalne dane są w bazie — wystarczy mieć <strong>odpowiednie uprawnienia</strong> 
-                                (rolę), a serwer zwróci pełne dane zamiast zamaskowanych. Dlatego RBAC jest kluczowy!
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="info-box" style="margin-top: 25px;">
-                        <h4>📋 Kiedy stosować maskowanie?</h4>
-                        <ul>
-                            <li><strong>Środowiska testowe/deweloperskie</strong> — realistyczne dane bez ryzyka wycieku</li>
-                            <li><strong>Helpdesk i support</strong> — weryfikacja klienta bez pełnego dostępu</li>
-                            <li><strong>Raporty i dashboardy</strong> — agregacje bez ujawniania jednostkowych danych</li>
-                            <li><strong>Logi systemowe</strong> — debugowanie bez zapisywania danych osobowych</li>
-                            <li><strong>Szkolenia pracowników</strong> — nauka na "prawdziwych" danych</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- PSEUDONIMIZACJA -->
-                <div class="technique-content" id="tech-pseudonym">
-                    <div class="info-box">
-                        <h4>🔄 Czym jest pseudonimizacja?</h4>
-                        <p>
-                            <strong>Pseudonimizacja</strong> (Art. 4 pkt 5 RODO) to przetwarzanie danych osobowych w taki sposób, że nie można ich już przypisać konkretnej osobie 
-                            <strong>bez użycia dodatkowych informacji</strong>. Te dodatkowe informacje (klucz mapowania) muszą być przechowywane oddzielnie.
-                        </p>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🖥️ Gdzie odbywa się pseudonimizacja?</h3>
-                    
-                    <div class="architecture-diagram">
-                        <div class="diagram-title">Architektura pseudonimizacji</div>
-                        <div class="diagram-flow">
-                            <div class="diagram-node">
-                                <div class="node-icon">📝</div>
-                                <div class="node-label">Dane wejściowe</div>
-                                <div style="font-size: 0.75rem; color: #4caf50; margin-top: 5px;">Jan Kowalski</div>
-                            </div>
-                            <div class="diagram-arrow animated">→</div>
-                            <div class="diagram-node server highlight">
-                                <div class="node-icon">⚙️</div>
-                                <div class="node-label">SERWER</div>
-                                <div style="font-size: 0.75rem; color: #ffa500; margin-top: 5px;">Generuje ID</div>
-                            </div>
-                            <div class="diagram-arrow animated">→</div>
-                            <div class="diagram-node">
-                                <div class="node-icon">🗄️</div>
-                                <div class="node-label">Baza główna</div>
-                                <div style="font-size: 0.75rem; color: #4a9eff; margin-top: 5px;">USR_00001</div>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 20px; text-align: center;">
-                            <div class="diagram-arrow" style="transform: rotate(90deg); display: inline-block;">→</div>
-                        </div>
-                        
-                        <div class="diagram-flow" style="margin-top: 20px;">
-                            <div class="diagram-node" style="border-color: #ff6b6b; background: rgba(255,107,107,0.1);">
-                                <div class="node-icon">🔐</div>
-                                <div class="node-label">Bezpieczny sejf</div>
-                                <div style="font-size: 0.7rem; color: #ff6b6b; margin-top: 5px;">USR_00001 → Jan Kowalski</div>
-                            </div>
-                        </div>
-                        
-                        <div class="info-box warning" style="margin-top: 20px;">
-                            <h4>⚠️ Kluczowa zasada RODO</h4>
-                            <p>
-                                Klucz mapowania (tabela łącząca pseudonimy z oryginałami) <strong>musi być przechowywany oddzielnie</strong> 
-                                od danych pseudonimizowanych — najlepiej w innym systemie, z osobnymi uprawnieniami dostępu.
-                            </p>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">⏱️ Kiedy następuje pseudonimizacja?</h3>
-                    
-                    <div class="process-steps">
-                        <div class="process-step">
-                            <div class="step-number">1</div>
-                            <div class="step-content">
-                                <h4>Moment zapisu danych</h4>
-                                <p>Pseudonimizacja odbywa się <strong>podczas zapisywania</strong> danych do bazy — nie podczas odczytu jak maskowanie.</p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">2</div>
-                            <div class="step-content">
-                                <h4>Generowanie pseudonimu</h4>
-                                <p>Serwer tworzy unikalny identyfikator: <code>USR_00001</code>, <code>UUID</code>, lub hash</p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <h4>Zapis do dwóch miejsc</h4>
-                                <p>
-                                    <strong>Baza główna:</strong> <code>{id: "USR_00001", age: 38, city: "Gdańsk"}</code><br>
-                                    <strong>Sejf:</strong> <code>{id: "USR_00001", real_name: "Jan Kowalski"}</code>
-                                </p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">4</div>
-                            <div class="step-content">
-                                <h4>Codzienna praca</h4>
-                                <p>Analitycy, systemy ML, raporty — wszystko pracuje na pseudonimach. Nikt nie potrzebuje prawdziwych nazwisk.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🔄 Jak odtworzyć oryginalne dane?</h3>
-                    
-                    <div class="key-lookup">
-                        <p style="color: #ccc; margin-bottom: 15px;">
-                            W pseudonimizacji potrzebujesz <strong>klucza mapowania</strong> — tabeli łączącej pseudonimy z oryginałami.
-                        </p>
-                        
-                        <div class="lookup-visual">
-                            <div class="data-box">
-                                <div class="box-label">Pseudonim</div>
-                                <div class="box-value" style="color: #4a9eff;">USR_00001</div>
-                            </div>
-                            <div style="font-size: 1.5rem; color: #888;">+</div>
-                            <div class="key-box">
-                                <div class="box-label">Klucz mapowania</div>
-                                <div class="box-value" style="color: #ffa500; font-size: 0.9rem;">USR_00001 → Jan K.</div>
-                            </div>
-                            <div style="font-size: 1.5rem; color: #888;">=</div>
-                            <div class="result-display">
-                                <div class="box-label">Oryginał</div>
-                                <div class="box-value" style="color: #4caf50;">Jan Kowalski</div>
-                            </div>
-                        </div>
-                        
-                        <div class="info-box" style="margin-top: 20px; text-align: left;">
-                            <h4>🔐 Dostęp do klucza mapowania</h4>
-                            <ul>
-                                <li>Przechowywany w osobnym, zabezpieczonym systemie</li>
-                                <li>Dostęp tylko dla IOD (Inspektor Ochrony Danych) i wyznaczonych osób</li>
-                                <li>Każdy dostęp jest logowany i wymaga uzasadnienia</li>
-                                <li>Regularne audyty dostępu do klucza</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div class="info-box success" style="margin-top: 25px;">
-                        <h4>✅ Dlaczego RODO wymaga pseudonimizacji?</h4>
-                        <p>
-                            Art. 32 RODO wymienia pseudonimizację jako jeden ze środków zapewnienia bezpieczeństwa. 
-                            Nawet przy wycieku danych — atakujący dostaje tylko <code>USR_00001</code>, nie "Jan Kowalski".
-                        </p>
-                        <ul>
-                            <li><strong>Minimalizuje ryzyko</strong> — wyciek pseudonimów to mniejsza szkoda</li>
-                            <li><strong>Umożliwia analizę</strong> — można pracować na danych bez identyfikacji osób</li>
-                            <li><strong>Zgodność z privacy by design</strong> — ochrona wbudowana w architekturę</li>
-                        </ul>
-                    </div>
-
-                    <div class="info-box warning" style="margin-top: 25px;">
-                        <h4>⚠️ Pseudonimizacja ≠ Anonimizacja</h4>
-                        <p>
-                            Dane pseudonimizowane <strong>nadal są danymi osobowymi</strong> w rozumieniu RODO! 
-                            Można je powiązać z osobą (mając klucz), więc podlegają wszystkim wymogom rozporządzenia.
-                        </p>
-                    </div>
-                </div>
-
-                <!-- ANONIMIZACJA -->
-                <div class="technique-content" id="tech-anonym">
-                    <div class="info-box danger">
-                        <h4>🚫 Czym jest anonimizacja?</h4>
-                        <p>
-                            <strong>Anonimizacja</strong> to <strong>nieodwracalne</strong> usunięcie możliwości identyfikacji osoby. 
-                            Po prawidłowej anonimizacji dane <strong>przestają być danymi osobowymi</strong> i nie podlegają RODO.
-                        </p>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🖥️ Gdzie odbywa się anonimizacja?</h3>
-                    
-                    <div class="architecture-diagram">
-                        <div class="diagram-title">Proces anonimizacji (jednokierunkowy!)</div>
-                        <div class="diagram-flow">
-                            <div class="diagram-node">
-                                <div class="node-icon">📝</div>
-                                <div class="node-label">Dane oryginalne</div>
-                                <div style="font-size: 0.75rem; color: #4caf50; margin-top: 5px;">Jan Kowalski, 38 lat</div>
-                            </div>
-                            <div class="diagram-arrow animated">→</div>
-                            <div class="diagram-node server highlight" style="border-color: #ff6b6b;">
-                                <div class="node-icon">🔥</div>
-                                <div class="node-label">ANONIMIZACJA</div>
-                                <div style="font-size: 0.75rem; color: #ff6b6b; margin-top: 5px;">Nieodwracalna!</div>
-                            </div>
-                            <div class="diagram-arrow animated">→</div>
-                            <div class="diagram-node">
-                                <div class="node-icon">📊</div>
-                                <div class="node-label">Dane anonimowe</div>
-                                <div style="font-size: 0.75rem; color: #888; margin-top: 5px;">Mężczyzna, 35-40 lat</div>
-                            </div>
-                        </div>
-                        
-                        <div class="info-box danger" style="margin-top: 20px;">
-                            <h4>🚫 Brak drogi powrotnej!</h4>
-                            <p>
-                                W przeciwieństwie do maskowania i pseudonimizacji, anonimizacja jest <strong>jednokierunkowa</strong>. 
-                                Nie ma klucza, nie ma sejfu — oryginalne dane są trwale utracone lub zniszczone.
-                            </p>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🛠️ Techniki anonimizacji</h3>
-                    
-                    <div class="process-steps">
-                        <div class="process-step">
-                            <div class="step-number">1</div>
-                            <div class="step-content">
-                                <h4>Generalizacja</h4>
-                                <p>
-                                    Zmniejszenie precyzji: <code>38 lat → 35-40 lat</code>, <code>Gdańsk → Pomorskie</code><br>
-                                    Im większy przedział, tym lepsza anonimizacja, ale mniejsza użyteczność.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">2</div>
-                            <div class="step-content">
-                                <h4>Usunięcie identyfikatorów</h4>
-                                <p>
-                                    Całkowite usunięcie: imię, nazwisko, PESEL, email — wszystko co jednoznacznie identyfikuje.<br>
-                                    <code>Jan Kowalski → [USUNIĘTO]</code>
-                                </p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <h4>Perturbacja (szum)</h4>
-                                <p>
-                                    Dodanie losowego szumu: <code>pensja 8500 zł → 8200-8800 zł (±losowo)</code><br>
-                                    Statystyki pozostają poprawne, ale jednostkowe wartości są nieprawdziwe.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="process-step">
-                            <div class="step-number">4</div>
-                            <div class="step-content">
-                                <h4>k-Anonimowość</h4>
-                                <p>
-                                    Każdy rekord musi być nieodróżnialny od co najmniej k-1 innych rekordów.<br>
-                                    Np. przy k=5: minimum 5 osób "Mężczyzna, 35-40, Pomorskie"
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <h3 style="color: #4a9eff; margin: 25px 0 15px;">🔄 Czy można odtworzyć dane?</h3>
-                    
-                    <div class="key-lookup">
-                        <div class="lookup-visual">
-                            <div class="data-box" style="border-color: #666;">
-                                <div class="box-label">Dane anonimowe</div>
-                                <div class="box-value" style="color: #888;">Mężczyzna, 35-40</div>
-                            </div>
-                            <div style="font-size: 1.5rem; color: #888;">+</div>
-                            <div class="key-box" style="border-color: #ff6b6b; background: rgba(255,107,107,0.1);">
-                                <div class="box-label">Klucz</div>
-                                <div class="box-value" style="color: #ff6b6b;">❌ NIE ISTNIEJE</div>
-                            </div>
-                            <div style="font-size: 1.5rem; color: #888;">=</div>
-                            <div class="result-display" style="border-color: #666; background: rgba(100,100,100,0.1);">
-                                <div class="box-label">Oryginał</div>
-                                <div class="box-value" style="color: #ff6b6b;">NIEODWRACALNE</div>
-                            </div>
-                        </div>
-                        
-                        <div class="info-box danger" style="margin-top: 20px; text-align: left;">
-                            <h4>❌ Odtworzenie niemożliwe</h4>
-                            <p>
-                                <strong>To jest cały sens anonimizacji!</strong> Jeśli dane można odtworzyć — to nie jest anonimizacja, tylko pseudonimizacja.
-                                Prawidłowo zanonimizowane dane są bezużyteczne dla identyfikacji konkretnej osoby.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="info-box warning" style="margin-top: 25px;">
-                        <h4>⚠️ Prawdziwa anonimizacja jest trudna!</h4>
-                        <ul>
-                            <li><strong>Atak re-identyfikacyjny</strong> — połączenie z innymi zbiorami danych może ujawnić tożsamość</li>
-                            <li><strong>Netflix Prize (2006)</strong> — "anonimowe" oceny filmów połączono z IMDB i zidentyfikowano użytkowników</li>
-                            <li><strong>Dane lokalizacyjne</strong> — nawet bez nazwiska, unikalne wzorce ruchu identyfikują osobę</li>
-                            <li><strong>Quasi-identyfikatory</strong> — kombinacja (wiek + kod pocztowy + płeć) często jest unikalna</li>
-                        </ul>
-                    </div>
-
-                    <div class="info-box success" style="margin-top: 25px;">
-                        <h4>✅ Korzyści prawidłowej anonimizacji</h4>
-                        <ul>
-                            <li><strong>Dane nie podlegają RODO</strong> — brak ograniczeń przetwarzania</li>
-                            <li><strong>Można udostępniać publicznie</strong> — np. zbiory do badań naukowych</li>
-                            <li><strong>Brak ryzyka wycieku danych osobowych</strong> — bo ich nie ma</li>
-                            <li><strong>Zachowanie wartości statystycznej</strong> — agregacje pozostają poprawne</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- TABELA PORÓWNAWCZA -->
-                <h3 style="color: #4a9eff; margin: 35px 0 20px; text-align: center;">📊 Porównanie technik</h3>
-                
-                <table class="comparison-table">
-                    <thead>
-                        <tr>
-                            <th>Cecha</th>
-                            <th>🎭 Maskowanie</th>
-                            <th>🔄 Pseudonimizacja</th>
-                            <th>🚫 Anonimizacja</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Odwracalność</td>
-                            <td class="yes">✅ Tak (uprawnienia)</td>
-                            <td class="yes">✅ Tak (klucz)</td>
-                            <td class="no">❌ Nie</td>
-                        </tr>
-                        <tr>
-                            <td>Podlega RODO?</td>
-                            <td class="yes">✅ Tak</td>
-                            <td class="yes">✅ Tak</td>
-                            <td class="no">❌ Nie</td>
-                        </tr>
-                        <tr>
-                            <td>Kiedy stosowana?</td>
-                            <td>Podczas odczytu</td>
-                            <td>Podczas zapisu</td>
-                            <td>Jednorazowo (eksport)</td>
-                        </tr>
-                        <tr>
-                            <td>Oryginał w bazie?</td>
-                            <td class="yes">✅ Tak</td>
-                            <td class="partial">⚠️ W sejfie</td>
-                            <td class="no">❌ Usunięty</td>
-                        </tr>
-                        <tr>
-                            <td>Wymaga klucza?</td>
-                            <td class="no">❌ Nie</td>
-                            <td class="yes">✅ Tak</td>
-                            <td class="no">❌ Nie istnieje</td>
-                        </tr>
-                        <tr>
-                            <td>Typowe zastosowanie</td>
-                            <td>Testy, support, logi</td>
-                            <td>Analityka, badania</td>
-                            <td>Publikacje, open data</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </section>
-
-    <!-- ============ SEKCJA 2: ANALIZA FORMULARZA ============ -->
-    <section id="analyzer" class="tab-content">
-        <div class="analyzer-container">
-            <div class="panel">
-                <h2>📋 Formularz rejestracji</h2>
-                
-                <div class="form-field" data-field="email">
-                    <label>
-                        Email 
-                        <span class="badge required">WYMAGANE</span>
-                    </label>
-                    <input type="email" id="analyze-email" placeholder="Do założenia konta">
-                </div>
-
-                <div class="form-field" data-field="password">
-                    <label>
-                        Hasło
-                        <span class="badge required">WYMAGANE</span>
-                    </label>
-                    <input type="password" id="analyze-password" placeholder="Min. 8 znaków">
-                </div>
-
-                <div class="form-field" data-field="name">
-                    <label>
-                        Imię
-                        <span class="badge optional">OPCJONALNE</span>
-                    </label>
-                    <input type="text" id="analyze-name" placeholder="Do personalizacji">
-                </div>
-
-                <div class="form-field" data-field="phone">
-                    <label>
-                        Numer telefonu
-                        <span class="badge optional">OPCJONALNE</span>
-                    </label>
-                    <input type="tel" id="analyze-phone" placeholder="Do powiadomień SMS">
-                </div>
-
-                <div class="form-field" data-field="birthdate">
-                    <label>
-                        Data urodzenia
-                        <span class="badge excessive">NADMIAROWE?</span>
-                    </label>
-                    <input type="date" id="analyze-birthdate">
-                </div>
-
-                <div class="form-field" data-field="pesel">
-                    <label>
-                        PESEL
-                        <span class="badge excessive">NADMIAROWE!</span>
-                    </label>
-                    <input type="text" id="analyze-pesel" placeholder="Czy na pewno potrzebny?">
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>🔍 GDPR Inspector</h2>
-                
-                <div class="compliance-meter">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Zgodność z RODO</span>
-                        <span id="compliance-percent">100%</span>
-                    </div>
-                    <div class="meter-bar">
-                        <div class="meter-fill" id="compliance-bar" style="width: 100%"></div>
-                    </div>
-                </div>
-
-                <div class="inspector-log" id="inspector-log">
-                    <div class="log-entry info">
-                        🚀 Inspector uruchomiony. Zacznij wypełniać formularz...
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- ============ SEKCJA UPLOAD: WCZYTAJ DANE ============ -->
-    <section id="upload" class="tab-content">
+    <section id="upload" class="tab-content active">
         <div class="upload-container">
             <!-- LEWA KOLUMNA: Formularz wczytywania -->
             <div class="panel upload-panel">
@@ -802,6 +93,9 @@
                     </div>
                 </div>
 
+                <!-- Akcja: wysyłka do bazy nad podglądem zawartości -->
+                <div class="pipeline-action" id="pipeline-action" style="display:none;"></div>
+
                 <div class="preview-empty" id="preview-empty">
                     <div class="preview-empty-icon">📋</div>
                     <p>Wczytaj plik, aby zobaczyć jego zawartość</p>
@@ -820,144 +114,170 @@
         </div>
     </section>
 
-    <!-- ============ SEKCJA 3: PRZEPŁYW DANYCH ============ -->
-    <section id="flow" class="tab-content">
-        <div class="flow-container">
-            <h2 style="color: #4a9eff; margin-bottom: 10px;">Jak przepływają Twoje dane?</h2>
-            <p style="color: #888; margin-bottom: 20px;">Kliknij na element, aby zobaczyć szczegóły</p>
-            
-            <div class="flow-diagram">
-                <div class="flow-node active" data-node="input">
-                    <div class="icon">📝</div>
-                    <div>Formularz</div>
+    <!-- ============ SEKCJA: PANEL ANALITYKA ============ -->
+    <section id="analyst" class="tab-content">
+        <div class="panel">
+            <h2>📊 Panel analityka — rekordy</h2>
+            <p class="upload-desc">Przeglądanie rekordów z bazy (<code>clean_records</code>). Tylko do odczytu — bez wgrywania danych.</p>
+
+            <div class="records-filters">
+                <div class="input-group">
+                    <label>Status</label>
+                    <select id="rec-status" class="option-select">
+                        <option value="">— wszystkie —</option>
+                        <option value="VALID">VALID</option>
+                        <option value="INVALID">INVALID</option>
+                        <option value="DUPLICATE">DUPLICATE</option>
+                    </select>
                 </div>
-                <div class="flow-arrow">→</div>
-                <div class="flow-node" data-node="encrypt">
-                    <div class="icon">🔐</div>
-                    <div>Szyfrowanie</div>
+                <div class="input-group">
+                    <label>Cel</label>
+                    <select id="rec-purpose" class="option-select">
+                        <option value="">— wszystkie —</option>
+                        <option value="rekrutacja">rekrutacja</option>
+                        <option value="marketing">marketing</option>
+                        <option value="obsługa klienta">obsługa klienta</option>
+                    </select>
                 </div>
-                <div class="flow-arrow">→</div>
-                <div class="flow-node" data-node="storage">
-                    <div class="icon">🗄️</div>
-                    <div>Baza danych</div>
+                <div class="input-group">
+                    <label>Na stronę</label>
+                    <select id="rec-limit" class="option-select">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                    </select>
                 </div>
-                <div class="flow-arrow">→</div>
-                <div class="flow-node" data-node="access">
-                    <div class="icon">👥</div>
-                    <div>Dostęp</div>
-                </div>
+                <button class="act-btn primary" id="rec-load" type="button">🔄 Pokaż rekordy</button>
             </div>
 
-            <div class="flow-details" id="flow-details">
-                <h3>📝 Zbieranie danych (Formularz)</h3>
-                <ul class="flow-items">
-                    <li>✅ <strong>Zasada minimalizacji (Art. 5 ust. 1 lit. c)</strong> — zbieramy tylko niezbędne dane do określonego celu</li>
-                    <li>✅ <strong>Podstawa prawna (Art. 6)</strong> — zgoda, umowa, obowiązek prawny, interes publiczny lub prawnie uzasadniony interes</li>
-                    <li>✅ <strong>Obowiązek informacyjny (Art. 13-14)</strong> — użytkownik musi wiedzieć: kto, co, dlaczego, jak długo</li>
-                    <li>✅ <strong>Transmisja HTTPS</strong> — TLS 1.3 szyfruje dane "w locie" między przeglądarką a serwerem</li>
-                    <li>⚠️ <strong>Walidacja server-side</strong> — nigdy nie ufaj danym od klienta (OWASP Top 10: A03 Injection)</li>
-                </ul>
-                <div class="flow-links">
-                    <h4>📚 Dowiedz się więcej:</h4>
-                    <div class="links-grid">
-                        <a href="https://gdpr-info.eu/art-5-gdpr/" target="_blank" rel="noopener noreferrer" class="source-link">
-                            <div class="link-title">📖 Art. 5 RODO — Zasady przetwarzania</div>
-                            <div class="link-desc">Oficjalny tekst + komentarz</div>
-                            <div class="link-url">gdpr-info.eu</div>
-                        </a>
-                        <a href="https://gdpr-info.eu/art-6-gdpr/" target="_blank" rel="noopener noreferrer" class="source-link">
-                            <div class="link-title">📖 Art. 6 RODO — Podstawy prawne</div>
-                            <div class="link-desc">6 legalnych podstaw przetwarzania</div>
-                            <div class="link-url">gdpr-info.eu</div>
-                        </a>
-                        <a href="https://gdpr-info.eu/art-13-gdpr/" target="_blank" rel="noopener noreferrer" class="source-link">
-                            <div class="link-title">📖 Art. 13 RODO — Obowiązek informacyjny</div>
-                            <div class="link-desc">Co musisz powiedzieć użytkownikowi</div>
-                            <div class="link-url">gdpr-info.eu</div>
-                        </a>
-                        <a href="https://owasp.org/www-project-top-ten/" target="_blank" rel="noopener noreferrer" class="source-link">
-                            <div class="link-title">🔒 OWASP Top 10</div>
-                            <div class="link-desc">10 najczęstszych zagrożeń webowych</div>
-                            <div class="link-url">owasp.org</div>
-                        </a>
-                        <a href="https://wiki.mozilla.org/Security/Server_Side_TLS" target="_blank" rel="noopener noreferrer" class="source-link">
-                            <div class="link-title">🔐 Mozilla TLS Guidelines</div>
-                            <div class="link-desc">Jak poprawnie skonfigurować HTTPS</div>
-                            <div class="link-url">wiki.mozilla.org</div>
-                        </a>
-                        <a href="https://uodo.gov.pl/pl/138" target="_blank" rel="noopener noreferrer" class="source-link">
-                            <div class="link-title">🇵🇱 UODO — Poradniki</div>
-                            <div class="link-desc">Oficjalne poradniki polskiego organu nadzorczego</div>
-                            <div class="link-url">uodo.gov.pl</div>
-                        </a>
-                    </div>
-                </div>
+            <div class="records-msg" id="rec-msg" style="display:none;"></div>
+            <div id="rec-table"></div>
+
+            <div class="records-pager">
+                <button class="act-btn" id="rec-prev" type="button" disabled>‹ Poprzednie</button>
+                <span id="rec-page-info" style="color:#888;font-size:0.85rem;"></span>
+                <button class="act-btn" id="rec-next" type="button" disabled>Następne ›</button>
             </div>
         </div>
     </section>
 
-    <!-- ============ SEKCJA 4: PRAWA UŻYTKOWNIKA ============ -->
-    <section id="rights" class="tab-content">
-        <div class="rights-container">
-            <div class="user-profile">
-                <div class="avatar">👤</div>
-                <div class="user-info">
-                    <h3>Jan Kowalski</h3>
-                    <p>jan.kowalski@email.com • Konto od: 15.03.2024</p>
+    <!-- ============ SEKCJA: PANEL ADMINISTRATORA ============ -->
+    <section id="admin" class="tab-content">
+        <div class="panel">
+            <h2>🛡️ Panel administratora — RODO</h2>
+            <p class="upload-desc">Operacje na danych osoby (po adresie e-mail). Wszystkie akcje wymagają roli <strong>admin</strong> i są logowane w audycie.</p>
+
+            <div class="input-group">
+                <label for="adm-email">E-mail osoby</label>
+                <input type="email" id="adm-email" placeholder="np. jan.kowalski@example.com" autocomplete="off">
+            </div>
+
+            <div class="admin-actions">
+                <button class="act-btn primary" id="adm-find" type="button">🔍 Pokaż dane</button>
+                <button class="act-btn" id="adm-export" type="button">📥 Eksport CSV</button>
+                <button class="act-btn" id="adm-freeze" type="button">❄️ Zamroź przetwarzanie</button>
+                <button class="act-btn" id="adm-unfreeze" type="button">🔓 Odblokuj przetwarzanie</button>
+                <button class="act-btn danger" id="adm-delete" type="button">🗑️ Usuń dane</button>
+            </div>
+
+            <div class="admin-msg" id="adm-msg" style="display:none;"></div>
+            <div id="adm-data"></div>
+
+            <!-- Edycja danych (change-data) -->
+            <div class="admin-block">
+                <h3>✏️ Edycja danych</h3>
+                <p class="upload-desc">Wypełnij tylko pola, które chcesz zmienić.</p>
+                <div class="admin-grid">
+                    <div class="input-group"><label>Imię</label><input type="text" id="adm-edit-first"></div>
+                    <div class="input-group"><label>Nazwisko</label><input type="text" id="adm-edit-last"></div>
+                    <div class="input-group"><label>PESEL</label><input type="text" id="adm-edit-pesel"></div>
+                    <div class="input-group"><label>Data urodzenia</label><input type="date" id="adm-edit-birth"></div>
+                    <div class="input-group"><label>Telefon</label><input type="tel" id="adm-edit-phone"></div>
                 </div>
+                <button class="act-btn primary" id="adm-edit-btn" type="button">💾 Zapisz zmiany</button>
             </div>
 
-            <div class="rights-buttons">
-                <button class="right-btn" data-right="access">
-                    <div class="right-icon">📄</div>
-                    <div class="right-name">Prawo dostępu</div>
-                    <div class="right-article">Art. 15 RODO</div>
-                </button>
-                <button class="right-btn" data-right="portability">
-                    <div class="right-icon">📦</div>
-                    <div class="right-name">Prawo do przenoszenia</div>
-                    <div class="right-article">Art. 20 RODO</div>
-                </button>
-                <button class="right-btn" data-right="rectify">
-                    <div class="right-icon">✏️</div>
-                    <div class="right-name">Prawo do sprostowania</div>
-                    <div class="right-article">Art. 16 RODO</div>
-                </button>
-                <button class="right-btn" data-right="consent">
-                    <div class="right-icon">🎚️</div>
-                    <div class="right-name">Zarządzanie zgodami</div>
-                    <div class="right-article">Art. 7 RODO</div>
-                </button>
-                <button class="right-btn" data-right="delete">
-                    <div class="right-icon">🗑️</div>
-                    <div class="right-name">Prawo do usunięcia</div>
-                    <div class="right-article">Art. 17 RODO</div>
-                </button>
-                <button class="right-btn" data-right="object">
-                    <div class="right-icon">✋</div>
-                    <div class="right-name">Prawo do sprzeciwu</div>
-                    <div class="right-article">Art. 21 RODO</div>
-                </button>
+            <!-- Zmiana zgody (change_consent) -->
+            <div class="admin-block">
+                <h3>🎚️ Zmiana zgody</h3>
+                <div class="admin-grid">
+                    <div class="input-group">
+                        <label>Cel</label>
+                        <select id="adm-consent-purpose" class="option-select">
+                            <option value="rekrutacja">rekrutacja</option>
+                            <option value="marketing">marketing</option>
+                            <option value="obsługa klienta">obsługa klienta</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Zgoda</label>
+                        <select id="adm-consent-value" class="option-select">
+                            <option value="true">TAK (udzielona)</option>
+                            <option value="false">NIE (wycofana)</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="act-btn primary" id="adm-consent-btn" type="button">✅ Zmień zgodę</button>
             </div>
 
-            <div class="rights-demo" id="rights-demo">
-                <h3>👆 Wybierz prawo, aby zobaczyć demonstrację</h3>
-                <p style="color: #888; margin-top: 10px;">
-                    Każde prawo z RODO możesz zobaczyć w akcji — jak wygląda realizacja żądania użytkownika.
-                </p>
+            <!-- Status pipeline -->
+            <div class="admin-block">
+                <h3>📈 Status pipeline</h3>
+                <button class="act-btn" id="adm-pipeline-btn" type="button">📈 Pobierz status</button>
+                <pre id="adm-pipeline-out" class="data-export" style="display:none;margin-top:12px;"></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ SEKCJA: LOGOWANIE / REJESTRACJA ============ -->
+    <section id="auth" class="tab-content">
+        <div class="auth-container">
+            <div class="panel auth-card">
+                <h2>🔑 Logowanie / Rejestracja</h2>
+
+                <!-- Widok dla niezalogowanych -->
+                <div id="auth-form">
+                    <p class="auth-desc">Zaloguj się na istniejące konto lub utwórz nowe. Hasło jest hashowane po stronie serwera (pwdlib / Argon2).</p>
+
+                    <div class="input-group">
+                        <label for="auth-email">Login</label>
+                        <input type="text" id="auth-email" placeholder="np. jan_kowalski lub email" autocomplete="username">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="auth-password">Hasło</label>
+                        <input type="password" id="auth-password" placeholder="Twoje hasło" autocomplete="current-password">
+                    </div>
+
+                    <div class="auth-buttons">
+                        <button class="auth-btn login" id="btn-login" type="button">🔓 Zaloguj</button>
+                        <button class="auth-btn register" id="btn-register" type="button">📝 Zarejestruj</button>
+                    </div>
+
+                    <div class="auth-message" id="auth-message" style="display:none;"></div>
+                </div>
+
+                <!-- Widok dla zalogowanych -->
+                <div id="auth-logged" style="display:none;">
+                    <div class="auth-logged-card">
+                        <div class="auth-logged-avatar">✅</div>
+                        <div class="auth-logged-info">
+                            <div class="auth-logged-label">Zalogowano jako</div>
+                            <div class="auth-logged-email" id="auth-logged-email">—</div>
+                            <div class="auth-logged-role" id="auth-logged-role"></div>
+                        </div>
+                    </div>
+                    <button class="auth-btn logout" id="btn-logout" type="button">🚪 Wyloguj</button>
+                    <div class="auth-message" id="auth-message-logged" style="display:none;"></div>
+                </div>
             </div>
         </div>
     </section>
 
     <footer class="footer">
         <p>Projekt edukacyjny • GDPR Live Inspector</p>
-        <p style="margin-top: 5px;">
-            Źródła: <a href="https://gdpr.eu/" target="_blank">GDPR.eu</a> • 
-            <a href="https://uodo.gov.pl/" target="_blank">UODO</a> • 
-            <a href="https://eur-lex.europa.eu/eli/reg/2016/679/oj" target="_blank">Rozporządzenie 2016/679</a>
-        </p>
     </footer>
 
-    <script src="script.js" defer></script>
+    <script src="script.js?v=4" defer></script>
 </body>
 </html>

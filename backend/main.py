@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from pipeline.load import get_engine, loadIntoAzure
+from pipeline.load import get_engine, loadIntoAzure, add_to_audit
 from pipeline.transform import transform, IngestEverything, checkPhone, format_phone
 from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -42,6 +42,8 @@ async def add_security_headers(request: Request, call_next):
 def get_records(request: Request, current_user = Depends(require_role(["admin", "analityk"])), limit: int = 50, offset: int = 0, status: str = "", purpose: str = ""):
     q = []
     params = []
+    q.append(f"processing_frozen = ?")
+    params.append('0')
     if status:
         q.append(f"status = ?")
         params.append(status)
@@ -57,8 +59,9 @@ def get_records(request: Request, current_user = Depends(require_role(["admin", 
         FETCH NEXT {limit} ROWS ONLY
     """
     try:
-        df = pd.read_sql(query, engine, params=params)
+        df = pd.read_sql(query, engine, params=tuple(params))
         df = df.fillna("")
+        add_to_audit("SELECT", "clean_records", current_user["email"], details="get_records")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Błąd serwera")
     return df.to_dict(orient="records")
@@ -86,6 +89,7 @@ async def run_pipeline(request: Request, file: UploadFile = File(...), current_u
     try:  
         df = transform(path, source)
         IngestEverything(df)
+        add_to_audit("INSERT", "clean_records, keys", current_user["email"], details=f"pipeline, Dodano {len(df)} rekordów")
         pipeline_status = {
         "status" : "completed",
         "records" : len(df),
@@ -119,6 +123,7 @@ def register_user(request: Request, email: str, password: str):
     dict = {'email': email, 'password_hash' : password_h}
     df = pd.DataFrame(dict,index=[0])
     loadIntoAzure('users', df)
+    add_to_audit("register", "users", email)
     return {"message": "registered user"}
 @app.post("/login")
 @limiter.limit("10/minute")
@@ -139,12 +144,14 @@ def login_user(request: Request, form_data: OAuth2PasswordRequestForm = Depends(
         raise HTTPException(status_code=401, detail="Niepoprawny email lub hasło")
     failed_attempts[email] = 0 
     access_token = create_access_token({"sub": df['email'].iloc[0], "role": df['role'].iloc[0]})
-    refresh_token = create_access_token({"sub" : email}, exprire_time=60*24*7)
+    refresh_token = create_access_token({"sub" : email, "role": df['role'].iloc[0]}, exprire_time=60*24*7)
+    add_to_audit("LOGIN", "users", email)
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type" : "bearer"}
 @app.post("/logout")
 @limiter.limit("10/minute")
 def logout(request: Request, token: str = Depends(oauth2_scheme)):
     blacklisted_tokens.add(token)
+    add_to_audit("LOGOUT", "users", get_current_user(token)["email"])
     return {"message": "Wylogowano"}
 @app.post("/refresh")
 @limiter.limit("10/minute")
@@ -154,9 +161,9 @@ def refresh(request: Request, token: str = Depends(oauth2_scheme)):
     return {"access_token" : new_token, "token_type" : "bearer"}
 def fetch_my_data(email: str):
     query = """
-    SELECT first_name, last_name, PESEL, birth_date, email, phone, purpose, consent
+    SELECT first_name, last_name, PESEL, birth_date, email, phone, purpose, consent, processing_frozen
     FROM clean_records c
-    JOIN keys k ON c.uuid = k.uuid
+    JOIN keys k ON c.id = k.id
     WHERE email = ?"""
     df = pd.read_sql(query, engine, params=[(email,)])
     df = df.fillna("")
@@ -165,6 +172,7 @@ def fetch_my_data(email: str):
 @limiter.limit("10/minute")
 def get_my_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
     df = fetch_my_data(email)
+    add_to_audit("SELECT", "clean_records, keys", current_user["email"], details="get_my_data")
     return df.to_dict(orient="records")
 @app.get("/change-data")
 @limiter.limit("10/minute")
@@ -188,12 +196,16 @@ def change_my_data(request: Request, email: str, first_name: str= None, last_nam
         params["email"] = email
         query = f"""
         UPDATE keys SET {", ".join(updates)} 
+        OUTPUT INSERTED.id
         FROM keys k
-        JOIN clean_records cr ON k.uuid = cr.uuid
+        JOIN clean_records cr ON k.id = cr.id
         WHERE cr.email = :email
         """
         with engine.connect() as conn:
-            conn.execute(text(query), params)
+            result = conn.execute(text(query), params)
+            changed_ids = [row[0] for row in result.fetchall()]
+            for id in changed_ids:
+                add_to_audit("UPDATE", "keys", current_user["email"], id, details=f"change_my_data: {', '.join(updates)}")
             conn.commit()
     if phone:
         params = {}
@@ -204,30 +216,37 @@ def change_my_data(request: Request, email: str, first_name: str= None, last_nam
         params["phone"] = phone
         query = f"""
         UPDATE clean_records SET phone = :phone
+        OUTPUT INSERTED.id
         WHERE email = :email
         """
         with engine.connect() as conn:
-            conn.execute(text(query), params)
+            result = conn.execute(text(query), params)
+            changed_ids = [row[0] for row in result.fetchall()]
+            for id in changed_ids:
+                add_to_audit("UPDATE", "keys", current_user["email"], id, details=f"change_my_data: phone")
             conn.commit()
     return {"message" : "Zaktualizowano dane"}
 @app.delete("/records")
 @limiter.limit("10/minute")
 def delete_my_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
     query1 = """
-    DELETE FROM clean_records WHERE email = :email
+    DELETE FROM clean_records OUTPUT DELETED.id WHERE email = :email
     """
     query2 = """
-    DELETE FROM raw_records WHERE email = :email
+    DELETE FROM raw_record WHERE email = :email
     """
     query3 = """
-    DELETE k FROM keys k
-    JOIN clean_records c ON k.uuid = c.uuid
+    DELETE FROM keys k
+    JOIN clean_records c ON k.id = c.id
     WHERE email = :email
     """
     with engine.connect() as conn:
-        conn.execute(text(query1), {"email" : email})
+        result1 = conn.execute(text(query1), {"email" : email})
+        ids = [row[0] for row in result1.fetchall()]
         conn.execute(text(query2),{"email" : email})
         conn.execute(text(query3), {"email" : email})
+        for i in ids:
+            add_to_audit("DELETE", "keys, clean_records, raw_records", current_user["email"], i, details="delete_my_data")
         conn.commit()
     return {"message" : "Usunięto dane"}
 @app.get("/export_data")
@@ -235,6 +254,7 @@ def delete_my_data(request: Request, email: str, current_user = Depends(require_
 def export_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
     df = fetch_my_data(email)
     df_csv = df.to_csv(index=False)
+    add_to_audit("SELECT", "clean_records", current_user["email"], details=f"export_data: {email}")
     return Response(
         content=df_csv,
         media_type="text/csv",
@@ -242,21 +262,45 @@ def export_data(request: Request, email: str, current_user = Depends(require_rol
             "Content-Disposition": "attachment; filename=data.csv"
         }
     )
+def add_record(df: pd.DataFrame, current_user):
+    csv_plik = df.to_csv("add.csv", index=False)
+    data = transform("add.csv", "csv")
+    IngestEverything(data)
+    os.remove("add.csv")
+    purpose = df["purpose"].iloc[0]
+    email = df["email"].iloc[0]
+    id = pd.read_sql("SELECT TOP 1 id FROM clean_records WHERE purpose = ? AND email = ?", engine, params=[(purpose, email)])
+    add_to_audit("INSERT", "clean_records, keys, raw_records", current_user["email"], id, "Dodano nową zgodę")
 @app.post("/change_consent")
 @limiter.limit("10/minute")
 def change_consent(request: Request, email: str, purpose: str, consent: bool, current_user = Depends(require_role(["admin"]))):
-    query = """
-        SELECT TOP 1 * from clean_records
-        WHERE email = ?
-        ORDER BY created_at DESC
-    """
-    df = pd.read_sql(query, engine, params=[(email, )])
-    df["purpose"] = purpose
-    df["consent"] = consent
-    df["source"] = 'self'
-    df["status"] = "VALID"
-    df["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    loadIntoAzure('clean_records', df)
+    with engine.connect() as conn:
+        existing = pd.read_sql("SELECT id FROM clean_records WHERE email = ? AND purpose = ?", engine, params=[(email, purpose)])
+        query1 = """
+            UPDATE clean_records
+            SET consent = :consent
+            OUTPUT INSERTED.id
+            WHERE email = :email AND purpose = :purpose
+        """
+        if len(existing) > 0: 
+            result = conn.execute(text(query1), {"email" : email, "purpose" : purpose, "consent" : consent})
+            id = [row[0] for row in result.fetchall()]
+            for i in id:
+                add_to_audit("UPDATE", "clean_records", current_user["email"], i, "Zmieniono zgodę")
+            conn.commit()
+        else: 
+            query = """
+                SELECT TOP 1 k.first_name, k.last_name, c.email, c.phone,
+                k.birth_date, c.purpose, c.consent, k.PESEL
+                FROM clean_records c
+                JOIN keys k ON c.id = k.id
+                WHERE c.email = ?
+            """
+            df = pd.read_sql(query, engine, params=[(email,)])
+            df['purpose'] = purpose
+            df['consent'] = consent
+            add_record(df, current_user)
+            
     return {"message": "Zmieniono zgodę"}
 @app.post("/freeze")
 @limiter.limit("10/minute")
@@ -269,3 +313,14 @@ def freeze(request: Request, email: str, current_user = Depends(require_role(["a
         conn.execute(text(query), {"email" :  email})
         conn.commit()
     return {"message" : "Przetwarzanie zamrożone"}
+@app.post("/un_freeze")
+@limiter.limit("10/minute")
+def un_freeze(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    with engine.connect() as conn:
+        query = """
+            UPDATE clean_records SET processing_frozen = 0
+            WHERE email = :email
+        """
+        conn.execute(text(query), {"email" :  email})
+        conn.commit()
+    return {"message" : "Przetwarzanie odblokowane"}

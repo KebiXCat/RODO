@@ -8,589 +8,69 @@
             });
         });
 
-        // ============ ZAKŁADKI TECHNIK ============
-        document.querySelectorAll('.technique-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.technique-tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.technique-content').forEach(c => c.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById('tech-' + tab.dataset.technique).classList.add('active');
+// ============ WSPÓLNA WARSTWA AUTORYZACJI (tokeny + apiFetch) ============
+const Auth = (function () {
+    const API = 'http://localhost:8000';
+
+    const getAccess  = () => localStorage.getItem('access_token');
+    const getRefresh = () => localStorage.getItem('refresh_token');
+    const setAccess  = (t) => localStorage.setItem('access_token', t);
+    function clear() {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+    }
+
+    function decodeJwt(token) {
+        try {
+            const payload = token.split('.')[1];
+            const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+            return JSON.parse(decodeURIComponent(escape(json)));
+        } catch (e) { return null; }
+    }
+
+    function isExpired(token) {
+        const p = decodeJwt(token);
+        return !p || (p.exp && p.exp * 1000 <= Date.now());
+    }
+
+    // Odśwież access token używając refresh tokenu. Zwraca nowy access albo null.
+    async function refreshAccessToken() {
+        const rt = getRefresh();
+        if (!rt || isExpired(rt)) return null;
+        try {
+            const res = await fetch(`${API}/refresh`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + rt }
             });
-        });
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (data.access_token) { setAccess(data.access_token); return data.access_token; }
+            return null;
+        } catch (e) { return null; }
+    }
 
-        // ============ RBAC INTERAKCJA ============
-        document.querySelectorAll('.rbac-role').forEach(role => {
-            role.addEventListener('click', () => {
-                document.querySelectorAll('.rbac-role').forEach(r => r.classList.remove('active'));
-                role.classList.add('active');
-            });
-        });
-
-        // ============ SEKCJA 1: MASKOWANIE ============
-        let currentMaskType = 'masking';
-        const pseudonymMap = {};
-        let pseudonymCounter = 1;
-
-        document.querySelectorAll('.masking-type button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.masking-type button').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentMaskType = btn.dataset.type;
-                
-                // Synchronizuj z zakładkami edukacyjnymi
-                document.querySelectorAll('.technique-tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.technique-content').forEach(c => c.classList.remove('active'));
-                
-                const techMap = { 'masking': 'masking', 'pseudonym': 'pseudonym', 'anonym': 'anonym' };
-                document.querySelector(`.technique-tab[data-technique="${techMap[currentMaskType]}"]`).classList.add('active');
-                document.getElementById('tech-' + techMap[currentMaskType]).classList.add('active');
-                
-                updateMasking();
-            });
-        });
-
-        function maskString(str, showFirst = 1, showLast = 0) {
-            if (!str || str.length <= showFirst + showLast) return str;
-            const first = str.substring(0, showFirst);
-            const last = showLast > 0 ? str.substring(str.length - showLast) : '';
-            const masked = '*'.repeat(str.length - showFirst - showLast);
-            return first + masked + last;
+    // fetch z Bearer access tokenem + automatycznym odświeżeniem przy 401 (jeden raz).
+    async function apiFetch(path, options = {}, _retried = false) {
+        let token = getAccess();
+        if (token && isExpired(token)) {
+            token = await refreshAccessToken();   // wygasł — odśwież zanim wyślesz
         }
+        const headers = Object.assign({}, options.headers || {});
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const url = path.startsWith('http') ? path : API + path;
+        const res = await fetch(url, Object.assign({}, options, { headers }));
 
-        function maskEmail(email) {
-            if (!email || !email.includes('@')) return email;
-            const [local, domain] = email.split('@');
-            return maskString(local, 2, 0) + '@' + maskString(domain, 0, 0).replace(/./g, '*');
+        if (res.status === 401 && !_retried) {
+            const newToken = await refreshAccessToken();
+            if (newToken) return apiFetch(path, options, true);   // ponów raz
+            clear();
+            document.dispatchEvent(new CustomEvent('auth:logout'));
         }
+        return res;
+    }
 
-        function pseudonymize(value, type) {
-            if (!value) return '-';
-            const key = type + ':' + value;
-            if (!pseudonymMap[key]) {
-                pseudonymMap[key] = `${type.toUpperCase()}_${String(pseudonymCounter++).padStart(5, '0')}`;
-            }
-            return pseudonymMap[key];
-        }
-
-        function anonymize(type) {
-            const responses = {
-                name: '[USUNIĘTO]',
-                email: 'user_' + Math.random().toString(36).substr(2, 8) + '@anon.local',
-                phone: '[BRAK DANYCH]',
-                pesel: '[NIEODWRACALNIE USUNIĘTO]'
-            };
-            return responses[type] || '[ANON]';
-        }
-
-        function applyProtection(value, type) {
-            if (!value) return '-';
-            
-            if (currentMaskType === 'masking') {
-                switch(type) {
-                    case 'name':
-                        return value.split(' ').map(part => maskString(part, 1, 0)).join(' ');
-                    case 'email':
-                        return maskEmail(value);
-                    case 'phone':
-                        return maskString(value.replace(/\s/g, ''), 0, 3);
-                    case 'pesel':
-                        return maskString(value, 0, 4);
-                    default:
-                        return maskString(value);
-                }
-            } else if (currentMaskType === 'pseudonym') {
-                return pseudonymize(value, type);
-            } else {
-                return anonymize(type);
-            }
-        }
-
-        function updateMasking() {
-            const name = document.getElementById('mask-name').value;
-            const email = document.getElementById('mask-email').value;
-            const phone = document.getElementById('mask-phone').value;
-            const pesel = document.getElementById('mask-pesel').value;
-
-            document.getElementById('result-name').textContent = applyProtection(name, 'name');
-            document.getElementById('result-email').textContent = applyProtection(email, 'email');
-            document.getElementById('result-phone').textContent = applyProtection(phone, 'phone');
-            document.getElementById('result-pesel').textContent = applyProtection(pesel, 'pesel');
-        }
-
-        ['mask-name', 'mask-email', 'mask-phone', 'mask-pesel'].forEach(id => {
-            document.getElementById(id).addEventListener('input', updateMasking);
-        });
-
-        // ============ SEKCJA 2: ANALIZA FORMULARZA ============
-        const fieldAnalysis = {
-            email: { 
-                status: 'ok', 
-                message: '✅ Email — niezbędny do realizacji usługi (podstawa: umowa)',
-                hint: 'Email jest OK — to podstawowa dana do komunikacji z użytkownikiem.'
-            },
-            password: { 
-                status: 'ok', 
-                message: '✅ Hasło — niezbędne do zabezpieczenia konta',
-                hint: 'Hasło jest OK — pamiętaj o hashowaniu (bcrypt/Argon2)!'
-            },
-            name: { 
-                status: 'info', 
-                message: 'ℹ️ Imię — opcjonalne, służy personalizacji. Pamiętaj o zgodzie!',
-                hint: 'Imię jest opcjonalne. Jeśli służy tylko do "Cześć, Jan!" — rozważ czy jest niezbędne.'
-            },
-            phone: { 
-                status: 'warning', 
-                message: '⚠️ Telefon — upewnij się, że masz podstawę prawną (zgoda/uzasadniony interes)',
-                hint: 'Telefon to dodatkowa dana kontaktowa. Czy na pewno potrzebujesz SMS-ów? Usuń jeśli nie.'
-            },
-            birthdate: { 
-                status: 'warning', 
-                message: '⚠️ Data urodzenia — czy naprawdę potrzebujesz? Rozważ zbieranie tylko wieku lub przedziału',
-                hint: 'Zamiast daty urodzenia rozważ: pytanie "Czy masz 18 lat? TAK/NIE" — minimalizacja danych!'
-            },
-            pesel: { 
-                status: 'danger', 
-                message: '❌ PESEL — dane nadmiarowe! Numer identyfikacyjny wymaga szczególnej ochrony i uzasadnienia',
-                hint: '🚨 PESEL to dana wrażliwa! Usuń to pole — jest nadmiarowe dla większości usług online.'
-            }
-        };
-
-        let collectedFields = new Set();
-        let loggedMessages = new Set(); // Śledzi które wiadomości już pokazano
-
-        document.querySelectorAll('#analyzer .form-field input').forEach(input => {
-            // Reaguj na każdą zmianę wartości (wpisywanie I usuwanie)
-            input.addEventListener('input', function() {
-                const field = this.closest('.form-field').dataset.field;
-                const analysis = fieldAnalysis[field];
-                const fieldElement = this.closest('.form-field');
-                const hasValue = this.value.trim().length > 0;
-                
-                if (hasValue) {
-                    // DODAWANIE danych do pola
-                    if (!collectedFields.has(field)) {
-                        collectedFields.add(field);
-                        addLogEntry(analysis.message, analysis.status);
-                        loggedMessages.add(field + '_add');
-                        
-                        // Specjalne ostrzeżenie dla PESEL
-                        if (field === 'pesel' && !loggedMessages.has('pesel_alert')) {
-                            addLogEntry('🚨 ALERT: Zbierasz PESEL bez wyraźnej podstawy prawnej!', 'danger');
-                            loggedMessages.add('pesel_alert');
-                        }
-                    }
-                    
-                    // Dodaj klasę statusu
-                    fieldElement.classList.remove('success', 'warning', 'danger', 'fixed');
-                    fieldElement.classList.add(analysis.status);
-                    
-                } else {
-                    // USUWANIE danych z pola
-                    if (collectedFields.has(field)) {
-                        collectedFields.delete(field);
-                        
-                        // Komunikat o usunięciu danych
-                        if (analysis.status === 'danger') {
-                            addLogEntry(`✅ <strong>${getFieldName(field)}</strong> usunięte — świetna decyzja! Mniej danych = mniejsze ryzyko.`, 'success');
-                        } else if (analysis.status === 'warning') {
-                            addLogEntry(`🔄 <strong>${getFieldName(field)}</strong> usunięte — rozważ czy na pewno potrzebujesz tej danej.`, 'info');
-                        } else {
-                            addLogEntry(`ℹ️ <strong>${getFieldName(field)}</strong> usunięte.`, 'info');
-                        }
-                        
-                        // Zmień wygląd pola na "naprawione"
-                        fieldElement.classList.remove('success', 'warning', 'danger');
-                        if (analysis.status === 'danger' || analysis.status === 'warning') {
-                            fieldElement.classList.add('fixed');
-                        }
-                    }
-                }
-                
-                updateComplianceMeter();
-            });
-            
-            // Przy focusie pokaż podpowiedź (ale nie dodawaj do collectedFields)
-            input.addEventListener('focus', function() {
-                const field = this.closest('.form-field').dataset.field;
-                const analysis = fieldAnalysis[field];
-                
-                // Pokaż podpowiedź przy pierwszym kliknięciu w nadmiarowe pole
-                if ((analysis.status === 'danger' || analysis.status === 'warning') && !loggedMessages.has(field + '_hint')) {
-                    addLogEntry(`💡 <strong>Podpowiedź:</strong> ${analysis.hint || 'Zastanów się czy to pole jest niezbędne.'}`, 'info');
-                    loggedMessages.add(field + '_hint');
-                }
-            });
-        });
-        
-        function getFieldName(field) {
-            const names = {
-                'email': 'Email',
-                'password': 'Hasło',
-                'name': 'Imię',
-                'phone': 'Telefon',
-                'birthdate': 'Data urodzenia',
-                'pesel': 'PESEL'
-            };
-            return names[field] || field;
-        }
-
-        function addLogEntry(message, type = 'info') {
-            const log = document.getElementById('inspector-log');
-            const entry = document.createElement('div');
-            entry.className = `log-entry ${type}`;
-            entry.innerHTML = message;
-            
-            // Animacja wejścia
-            entry.style.opacity = '0';
-            entry.style.transform = 'translateX(-20px)';
-            log.appendChild(entry);
-            
-            // Trigger animacji
-            setTimeout(() => {
-                entry.style.transition = 'all 0.3s ease';
-                entry.style.opacity = '1';
-                entry.style.transform = 'translateX(0)';
-            }, 10);
-            
-            log.scrollTop = log.scrollHeight;
-        }
-
-        function updateComplianceMeter() {
-            let score = 100;
-            let penalties = [];
-            
-            collectedFields.forEach(field => {
-                const analysis = fieldAnalysis[field];
-                if (analysis.status === 'warning') {
-                    score -= 15;
-                    penalties.push(`${getFieldName(field)}: -15%`);
-                }
-                if (analysis.status === 'danger') {
-                    score -= 30;
-                    penalties.push(`${getFieldName(field)}: -30%`);
-                }
-            });
-            score = Math.max(0, score);
-            
-            const percentEl = document.getElementById('compliance-percent');
-            const barEl = document.getElementById('compliance-bar');
-            
-            // Animowana zmiana wartości
-            percentEl.textContent = score + '%';
-            barEl.style.width = score + '%';
-            
-            // Zmiana koloru w zależności od wyniku
-            if (score >= 80) {
-                barEl.style.background = 'linear-gradient(90deg, #4caf50, #8bc34a)';
-                percentEl.style.color = '#4caf50';
-            } else if (score >= 50) {
-                barEl.style.background = 'linear-gradient(90deg, #ff9800, #ffc107)';
-                percentEl.style.color = '#ff9800';
-            } else {
-                barEl.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
-                percentEl.style.color = '#f44336';
-            }
-        }
-
-        // ============ SEKCJA 3: PRZEPŁYW DANYCH ============
-        const flowDetails = {
-            input: {
-                title: '📝 Zbieranie danych (Formularz)',
-                items: [
-                    '✅ <strong>Zasada minimalizacji (Art. 5 ust. 1 lit. c)</strong> — zbieramy tylko niezbędne dane do określonego celu',
-                    '✅ <strong>Podstawa prawna (Art. 6)</strong> — zgoda, umowa, obowiązek prawny, interes publiczny lub prawnie uzasadniony interes',
-                    '✅ <strong>Obowiązek informacyjny (Art. 13-14)</strong> — użytkownik musi wiedzieć: kto, co, dlaczego, jak długo',
-                    '✅ <strong>Transmisja HTTPS</strong> — TLS 1.3 szyfruje dane "w locie" między przeglądarką a serwerem',
-                    '⚠️ <strong>Walidacja server-side</strong> — nigdy nie ufaj danym od klienta (OWASP Top 10: A03 Injection)'
-                ],
-                links: [
-                    { title: '📖 Art. 5 RODO — Zasady przetwarzania', url: 'https://gdpr-info.eu/art-5-gdpr/', desc: 'Oficjalny tekst + komentarz' },
-                    { title: '📖 Art. 6 RODO — Podstawy prawne', url: 'https://gdpr-info.eu/art-6-gdpr/', desc: '6 legalnych podstaw przetwarzania' },
-                    { title: '📖 Art. 13 RODO — Obowiązek informacyjny', url: 'https://gdpr-info.eu/art-13-gdpr/', desc: 'Co musisz powiedzieć użytkownikowi' },
-                    { title: '🔒 OWASP Top 10', url: 'https://owasp.org/www-project-top-ten/', desc: '10 najczęstszych zagrożeń webowych' },
-                    { title: '🔐 Mozilla TLS Guidelines', url: 'https://wiki.mozilla.org/Security/Server_Side_TLS', desc: 'Jak poprawnie skonfigurować HTTPS' },
-                    { title: '🇵🇱 UODO — Poradniki', url: 'https://uodo.gov.pl/pl/138', desc: 'Oficjalne poradniki polskiego organu nadzorczego' }
-                ]
-            },
-            encrypt: {
-                title: '🔐 Szyfrowanie i ochrona',
-                items: [
-                    '🔒 <strong>Szyfrowanie w spoczynku (at rest)</strong> — AES-256-GCM dla danych w bazie i na dysku',
-                    '🔒 <strong>Szyfrowanie w tranzycie (in transit)</strong> — TLS 1.3 eliminuje słabe szyfry (RC4, 3DES)',
-                    '🔑 <strong>Zarządzanie kluczami (KMS)</strong> — HSM, AWS KMS, Azure Key Vault — klucze nigdy w kodzie!',
-                    '🔐 <strong>Haszowanie haseł</strong> — Argon2id (zwycięzca PHC) > bcrypt > PBKDF2. Nigdy MD5/SHA1!',
-                    '📋 <strong>Art. 32 RODO</strong> — "odpowiedni poziom bezpieczeństwa" = ocena ryzyka + adekwatne środki'
-                ],
-                links: [
-                    { title: '📖 Art. 32 RODO — Bezpieczeństwo', url: 'https://gdpr-info.eu/art-32-gdpr/', desc: 'Obowiązek odpowiednich środków technicznych' },
-                    { title: '🔐 NIST Cryptographic Standards', url: 'https://csrc.nist.gov/publications/detail/sp/800-175b/rev-1/final', desc: 'Oficjalne standardy kryptograficzne USA' },
-                    { title: '🏆 Password Hashing Competition', url: 'https://www.password-hashing.net/', desc: 'Dlaczego Argon2 wygrał konkurs PHC' },
-                    { title: '🔑 OWASP Password Storage', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html', desc: 'Jak bezpiecznie przechowywać hasła' },
-                    { title: '☁️ AWS KMS Best Practices', url: 'https://docs.aws.amazon.com/kms/latest/developerguide/best-practices.html', desc: 'Zarządzanie kluczami w chmurze' },
-                    { title: '🔒 SSL Labs Test', url: 'https://www.ssllabs.com/ssltest/', desc: 'Sprawdź konfigurację TLS swojego serwera' }
-                ]
-            },
-            storage: {
-                title: '🗄️ Przechowywanie danych',
-                items: [
-                    '📍 <strong>Lokalizacja danych</strong> — EOG bez ograniczeń; poza EOG wymaga SCC, BCR lub decyzji adekwatności',
-                    '⏱️ <strong>Retencja (Art. 5 ust. 1 lit. e)</strong> — dane usuwane gdy cel przetwarzania ustał',
-                    '💾 <strong>Kopie zapasowe</strong> — szyfrowane, z własną polityką retencji, testowane regularnie',
-                    '🔍 <strong>Audyt i logi</strong> — SIEM, immutable logs, kto/kiedy/do czego miał dostęp',
-                    '📊 <strong>Rejestr czynności (Art. 30)</strong> — obowiązkowy dla firm 250+ lub przy przetwarzaniu wrażliwych danych'
-                ],
-                links: [
-                    { title: '📖 Art. 5 ust. 1 lit. e RODO — Retencja', url: 'https://gdpr-info.eu/art-5-gdpr/', desc: 'Zasada ograniczenia przechowywania' },
-                    { title: '📖 Art. 30 RODO — Rejestr czynności', url: 'https://gdpr-info.eu/art-30-gdpr/', desc: 'Co musi zawierać rejestr' },
-                    { title: '🌍 Transfery poza EOG', url: 'https://ec.europa.eu/info/law/law-topic/data-protection/international-dimension-data-protection_en', desc: 'Oficjalne wytyczne Komisji Europejskiej' },
-                    { title: '📋 Standardowe klauzule (SCC)', url: 'https://ec.europa.eu/info/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en', desc: 'Wzory umów dla transferów danych' },
-                    { title: '🇵🇱 UODO — Rejestr czynności', url: 'https://uodo.gov.pl/pl/123/214', desc: 'Poradnik UODO dot. rejestru' },
-                    { title: '💾 NIST Backup Guidelines', url: 'https://csrc.nist.gov/publications/detail/sp/800-34/rev-1/final', desc: 'Contingency Planning Guide' }
-                ]
-            },
-            access: {
-                title: '👥 Kontrola dostępu',
-                items: [
-                    '👤 <strong>Zasada najmniejszych uprawnień (PoLP)</strong> — dostęp tylko do tego co niezbędne do pracy',
-                    '🔐 <strong>MFA (Multi-Factor Auth)</strong> — obowiązkowe dla adminów i dostępu do danych wrażliwych',
-                    '📝 <strong>Audit trail</strong> — immutable logi: kto, kiedy, skąd, do jakich danych, jaka operacja',
-                    '📋 <strong>Umowy powierzenia (Art. 28)</strong> — procesor = firma przetwarzająca w Twoim imieniu',
-                    '🚫 <strong>Ocena dostawców</strong> — due diligence przed powierzeniem danych podmiotowi trzeciemu'
-                ],
-                links: [
-                    { title: '📖 Art. 28 RODO — Procesor', url: 'https://gdpr-info.eu/art-28-gdpr/', desc: 'Wymagania dla umów powierzenia' },
-                    { title: '📖 Art. 29 RODO — Upoważnienia', url: 'https://gdpr-info.eu/art-29-gdpr/', desc: 'Kto może przetwarzać dane' },
-                    { title: '🔐 NIST Access Control', url: 'https://csrc.nist.gov/publications/detail/sp/800-162/final', desc: 'Guide to Attribute Based Access Control' },
-                    { title: '🔑 OWASP Access Control', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Access_Control_Cheat_Sheet.html', desc: 'Best practices kontroli dostępu' },
-                    { title: '🇵🇱 UODO — Umowy powierzenia', url: 'https://uodo.gov.pl/pl/138/427', desc: 'Poradnik UODO' },
-                    { title: '📊 CIS Controls', url: 'https://www.cisecurity.org/controls', desc: '18 krytycznych kontroli bezpieczeństwa' }
-                ]
-            }
-        };
-
-        document.querySelectorAll('.flow-node').forEach(node => {
-            node.addEventListener('click', function() {
-                document.querySelectorAll('.flow-node').forEach(n => n.classList.remove('active'));
-                this.classList.add('active');
-                
-                const details = flowDetails[this.dataset.node];
-                const linksHtml = details.links ? `
-                    <div class="flow-links">
-                        <h4>📚 Dowiedz się więcej:</h4>
-                        <div class="links-grid">
-                            ${details.links.map(link => `
-                                <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="source-link">
-                                    <div class="link-title">${link.title}</div>
-                                    <div class="link-desc">${link.desc}</div>
-                                    <div class="link-url">${link.url.replace('https://', '').split('/')[0]}</div>
-                                </a>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : '';
-                
-                const html = `
-                    <h3>${details.title}</h3>
-                    <ul class="flow-items">
-                        ${details.items.map(item => `<li>${item}</li>`).join('')}
-                    </ul>
-                    ${linksHtml}
-                `;
-                document.getElementById('flow-details').innerHTML = html;
-            });
-        });
-
-        // ============ SEKCJA 4: PRAWA UŻYTKOWNIKA ============
-        const userData = {
-            name: "Jan Kowalski",
-            email: "jan.kowalski@email.com",
-            phone: "+48 500 123 456",
-            created: "2024-03-15",
-            lastLogin: "2025-02-05",
-            orders: 12,
-            consents: {
-                marketing: true,
-                profiling: false,
-                newsletter: true
-            }
-        };
-
-        const rightsDemo = {
-            access: () => {
-                return `
-                    <h3>📄 Prawo dostępu do danych (Art. 15)</h3>
-                    <p style="margin-bottom: 15px; color: #888;">Twoje dane przechowywane w naszym systemie:</p>
-                    <div class="data-export">${JSON.stringify(userData, null, 2)}</div>
-                    <p style="margin-top: 15px; color: #888; font-size: 0.9rem;">
-                        ✅ Administrator ma 30 dni na realizację żądania<br>
-                        ✅ Pierwsza kopia bezpłatna, kolejne mogą być płatne
-                    </p>
-                `;
-            },
-            portability: () => {
-                const exportData = JSON.stringify(userData, null, 2);
-                return `
-                    <h3>📦 Prawo do przenoszenia (Art. 20)</h3>
-                    <p style="margin-bottom: 15px; color: #888;">Eksport danych w formacie możliwym do odczytu maszynowego:</p>
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                        <button data-action="download-json" style="padding: 10px 20px; background: #4a9eff; border: none; color: #000; border-radius: 5px; cursor: pointer;">📥 Pobierz JSON</button>
-                        <button data-action="download-csv" style="padding: 10px 20px; background: #4caf50; border: none; color: #000; border-radius: 5px; cursor: pointer;">📥 Pobierz CSV</button>
-                    </div>
-                    <div class="data-export">${exportData}</div>
-                `;
-            },
-            rectify: () => {
-                return `
-                    <h3>✏️ Prawo do sprostowania (Art. 16)</h3>
-                    <p style="margin-bottom: 15px; color: #888;">Zaktualizuj swoje dane:</p>
-                    <div class="form-field" style="margin-bottom: 15px;">
-                        <label style="color: #888; margin-bottom: 5px; display: block;">Imię i nazwisko</label>
-                        <input type="text" value="${userData.name}" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 2px solid #4a9eff; color: #fff; border-radius: 5px;">
-                    </div>
-                    <div class="form-field" style="margin-bottom: 15px;">
-                        <label style="color: #888; margin-bottom: 5px; display: block;">Telefon</label>
-                        <input type="tel" value="${userData.phone}" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 2px solid #4a9eff; color: #fff; border-radius: 5px;">
-                    </div>
-                    <button style="padding: 10px 30px; background: #4caf50; border: none; color: #000; border-radius: 5px; cursor: pointer;">💾 Zapisz zmiany</button>
-                    <p style="margin-top: 15px; color: #888; font-size: 0.9rem;">
-                        ✅ Zmiany zostaną wprowadzone natychmiast<br>
-                        ✅ Powiadomienia o zmianie wysłane do administratora
-                    </p>
-                `;
-            },
-            consent: () => {
-                return `
-                    <h3>🎚️ Zarządzanie zgodami (Art. 7)</h3>
-                    <p style="margin-bottom: 15px; color: #888;">Twoje aktualne zgody — możesz je zmienić w dowolnym momencie:</p>
-                    <div class="consent-item">
-                        <div class="consent-label">
-                            <span>📧</span>
-                            <span>Komunikacja marketingowa</span>
-                        </div>
-                        <div class="toggle ${userData.consents.marketing ? 'active' : ''}" data-action="toggle-consent"></div>
-                    </div>
-                    <div class="consent-item">
-                        <div class="consent-label">
-                            <span>📊</span>
-                            <span>Profilowanie i personalizacja</span>
-                        </div>
-                        <div class="toggle ${userData.consents.profiling ? 'active' : ''}" data-action="toggle-consent"></div>
-                    </div>
-                    <div class="consent-item">
-                        <div class="consent-label">
-                            <span>📰</span>
-                            <span>Newsletter</span>
-                        </div>
-                        <div class="toggle ${userData.consents.newsletter ? 'active' : ''}" data-action="toggle-consent"></div>
-                    </div>
-                    <p style="margin-top: 15px; color: #888; font-size: 0.9rem;">
-                        ✅ Wycofanie zgody jest tak samo łatwe jak jej wyrażenie<br>
-                        ✅ Wycofanie nie wpływa na zgodność przetwarzania przed wycofaniem
-                    </p>
-                `;
-            },
-            delete: () => {
-                return `
-                    <h3>🗑️ Prawo do usunięcia — "prawo do bycia zapomnianym" (Art. 17)</h3>
-                    <div class="delete-animation" id="delete-demo">
-                        <div class="icon">⚠️</div>
-                        <p>Czy na pewno chcesz usunąć wszystkie swoje dane?</p>
-                        <p style="color: #888; font-size: 0.9rem; margin-top: 10px;">Ta operacja jest nieodwracalna.</p>
-                        <button data-action="simulate-delete" style="margin-top: 20px; padding: 15px 30px; background: #ff6b6b; border: none; color: #fff; border-radius: 5px; cursor: pointer; font-size: 1rem;">🗑️ Usuń moje dane</button>
-                    </div>
-                    <p style="margin-top: 15px; color: #888; font-size: 0.9rem;">
-                        ⚠️ Nie dotyczy danych niezbędnych do realizacji obowiązków prawnych<br>
-                        ⚠️ Administrator może odmówić w określonych przypadkach (Art. 17 ust. 3)
-                    </p>
-                `;
-            },
-            object: () => {
-                return `
-                    <h3>✋ Prawo do sprzeciwu (Art. 21)</h3>
-                    <p style="margin-bottom: 15px; color: #888;">Możesz sprzeciwić się przetwarzaniu w określonych celach:</p>
-                    <div class="consent-item">
-                        <div class="consent-label">
-                            <span>📢</span>
-                            <span>Marketing bezpośredni</span>
-                        </div>
-                        <button style="padding: 8px 16px; background: #ff6b6b; border: none; color: #fff; border-radius: 5px; cursor: pointer;">Sprzeciw</button>
-                    </div>
-                    <div class="consent-item">
-                        <div class="consent-label">
-                            <span>🎯</span>
-                            <span>Profilowanie do celów marketingowych</span>
-                        </div>
-                        <button style="padding: 8px 16px; background: #ff6b6b; border: none; color: #fff; border-radius: 5px; cursor: pointer;">Sprzeciw</button>
-                    </div>
-                    <div style="background: rgba(74, 158, 255, 0.1); padding: 15px; border-radius: 10px; margin-top: 20px;">
-                        <strong style="color: #4a9eff;">💡 Różnica od wycofania zgody:</strong>
-                        <p style="margin-top: 5px; font-size: 0.9rem;">Sprzeciw dotyczy przetwarzania na podstawie uzasadnionego interesu administratora — nie zgody. Przy marketingu bezpośrednim sprzeciw jest BEZWZGLĘDNY.</p>
-                    </div>
-                `;
-            }
-        };
-
-        document.querySelectorAll('.right-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const right = this.dataset.right;
-                document.getElementById('rights-demo').innerHTML = rightsDemo[right]();
-            });
-        });
-
-        function simulateDelete() {
-            const demo = document.getElementById('delete-demo');
-            demo.innerHTML = `
-                <div class="icon">🔄</div>
-                <p>Usuwanie danych...</p>
-                <div class="delete-progress">
-                    <div class="delete-progress-bar" id="delete-bar"></div>
-                </div>
-                <p id="delete-status" style="color: #888; font-size: 0.9rem;">Usuwanie profilu...</p>
-            `;
-            
-            const bar = document.getElementById('delete-bar');
-            const status = document.getElementById('delete-status');
-            const steps = [
-                { progress: 20, text: 'Usuwanie profilu...' },
-                { progress: 40, text: 'Usuwanie historii zamówień...' },
-                { progress: 60, text: 'Usuwanie zgód...' },
-                { progress: 80, text: 'Usuwanie z kopii zapasowych...' },
-                { progress: 100, text: 'Zakończono!' }
-            ];
-            
-            let i = 0;
-            const interval = setInterval(() => {
-                if (i < steps.length) {
-                    bar.style.width = steps[i].progress + '%';
-                    status.textContent = steps[i].text;
-                    i++;
-                } else {
-                    clearInterval(interval);
-                    demo.innerHTML = `
-                        <div class="icon">✅</div>
-                        <p style="color: #4caf50;">Twoje dane zostały usunięte</p>
-                        <p style="color: #888; font-size: 0.9rem; margin-top: 10px;">
-                            Potwierdzenie wysłane na email.<br>
-                            Niektóre dane mogą być zachowane przez okres wymagany prawem.
-                        </p>
-                    `;
-                }
-            }, 800);
-        }
-
-        function downloadData(format) {
-            alert(`📥 Pobieranie danych w formacie ${format.toUpperCase()}...\n\n(To jest demonstracja — w prawdziwej aplikacji rozpocząłby się download pliku)`);
-        }
-// ============ EVENT DELEGATION (zastąpienie inline onclick) ============
-document.addEventListener('click', function(e) {
-    const action = e.target.closest('[data-action]');
-    if (!action) return;
-    const act = action.getAttribute('data-action');
-    if (act === 'download-json') downloadData('json');
-    if (act === 'download-csv')  downloadData('csv');
-    if (act === 'toggle-consent') action.classList.toggle('active');
-    if (act === 'simulate-delete') simulateDelete();
-});
+    return { API, getAccess, getRefresh, setAccess, clear, decodeJwt, isExpired, refreshAccessToken, apiFetch };
+})();
 
 // ============ SEKCJA UPLOAD: WCZYTAJ DANE ============
 (function () {
@@ -667,16 +147,31 @@ document.addEventListener('click', function(e) {
         });
     });
 
+    const pipelineAction = document.getElementById('pipeline-action');
+
     const btnSendPipeline = document.createElement('button');
     btnSendPipeline.type = 'button';
+    btnSendPipeline.className = 'pipeline-send-btn';
     btnSendPipeline.textContent = '📤 Prześlij do bazy';
-    btnSendPipeline.style.cssText = 'padding:14px 32px;background:#4a9eff;border:none;color:#000;border-radius:8px;cursor:pointer;font-weight:700;font-size:1rem;display:none;letter-spacing:0.3px;';
-    previewActions.appendChild(btnSendPipeline);
+    pipelineAction.appendChild(btnSendPipeline);
 
     const pipelineStatus = document.createElement('div');
-    pipelineStatus.style.cssText = 'display:none;margin-top:16px;padding:28px 32px;border-radius:12px;text-align:center;font-size:1.4rem;font-weight:700;letter-spacing:0.3px;';
-    const uploadPanel = document.getElementById('upload-options').parentElement;
-    uploadPanel.appendChild(pipelineStatus);
+    pipelineStatus.className = 'pipeline-status';
+    pipelineStatus.style.display = 'none';
+    pipelineAction.appendChild(pipelineStatus);
+
+    // Po wysłaniu (sukces lub błąd) — możliwość wczytania kolejnego pliku do pipeline'u
+    const btnLoadAnother = document.createElement('button');
+    btnLoadAnother.type = 'button';
+    btnLoadAnother.className = 'pipeline-another-btn';
+    btnLoadAnother.textContent = '📂 Wczytaj kolejny plik';
+    btnLoadAnother.style.display = 'none';
+    pipelineAction.appendChild(btnLoadAnother);
+
+    btnLoadAnother.addEventListener('click', () => {
+        clearFile();
+        fileInput.click();
+    });
 
     if (!document.getElementById('spin-style')) {
         const s = document.createElement('style');
@@ -685,7 +180,7 @@ document.addEventListener('click', function(e) {
         document.head.appendChild(s);
     }
 
-    function showPipelineStatus(type) {
+    function showPipelineStatus(type, message) {
         pipelineStatus.style.display    = 'block';
         pipelineStatus.style.border     = '';
         pipelineStatus.style.background = '';
@@ -705,7 +200,7 @@ document.addEventListener('click', function(e) {
             pipelineStatus.style.background = 'rgba(244,67,54,0.12)';
             pipelineStatus.style.border     = '2px solid #f44336';
             pipelineStatus.style.color      = '#f44336';
-            pipelineStatus.innerHTML = '❌ Błąd wysyłania';
+            pipelineStatus.innerHTML = '❌ ' + escapeHtml(message || 'Błąd wysyłania');
         } else {
             pipelineStatus.style.display = 'none';
         }
@@ -718,33 +213,42 @@ document.addEventListener('click', function(e) {
     });
 
     async function sendToPipeline(file){
-        const url = "http://localhost:8000/pipeline/run";
         btnSendPipeline.disabled = true;
         showPipelineStatus('loading');
         try{
             const formData = new FormData();
             formData.append("file", file);
-            const response = await fetch(url, {
+
+            // apiFetch dokłada Bearer access token i sam odświeża go przy 401
+            const response = await Auth.apiFetch('/pipeline/run', {
                 method: "POST",
                 body: formData
             });
 
             if(!response.ok){
-                throw new Error(`Response status: ${response.status}`);
+                // Wyciągnij dokładny komunikat błędu z backendu (pole "detail")
+                let detail = `Błąd serwera (${response.status})`;
+                try {
+                    const data = await response.json();
+                    if (typeof data.detail === 'string') {
+                        detail = data.detail;
+                    } else if (Array.isArray(data.detail)) {
+                        detail = data.detail.map(d => d.msg).join(', ');
+                    }
+                } catch (e) { /* odpowiedź bez JSON-a — zostaje fallback */ }
+                throw new Error(detail);
             }
+            // Sukces: ukryj przycisk wysyłki, pokaż możliwość wczytania kolejnego pliku
+            btnSendPipeline.style.display = 'none';
             showPipelineStatus('success');
-            setTimeout(() => {
-                showPipelineStatus('hidden');
-                btnSendPipeline.disabled = false;
-            }, 4000);
+            btnLoadAnother.style.display = '';
         }
         catch(error){
             console.error(error.message);
-            showPipelineStatus('error');
-            setTimeout(() => {
-                showPipelineStatus('hidden');
-                btnSendPipeline.disabled = false;
-            }, 4000);
+            showPipelineStatus('error', error.message);
+            // Błąd: zostaw możliwość ponowienia oraz wczytania kolejnego pliku
+            btnSendPipeline.disabled = false;
+            btnLoadAnother.style.display = '';
         }
     }
     function handleFile(file) {
@@ -782,7 +286,11 @@ document.addEventListener('click', function(e) {
         uploadOptions.style.display = 'block';
         csvOptions.style.display = ext === 'csv' ? 'flex' : 'none';
         previewActions.style.display = 'flex';
+        pipelineAction.style.display = 'block';
         btnSendPipeline.style.display = '';
+        btnSendPipeline.disabled = false;
+        btnLoadAnother.style.display = 'none';
+        showPipelineStatus('hidden');
     }
 
     function clearFile() {
@@ -790,6 +298,9 @@ document.addEventListener('click', function(e) {
         currentFileType = '';
         currentFile     = null;
         btnSendPipeline.style.display = 'none';
+        btnLoadAnother.style.display  = 'none';
+        pipelineAction.style.display  = 'none';
+        showPipelineStatus('hidden');
         fileInput.value = '';
         fileInfoCard.style.display  = 'none';
         uploadOptions.style.display = 'none';
@@ -942,4 +453,438 @@ document.addEventListener('click', function(e) {
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
+}());
+
+// ============ PANELE WG ROLI (analityk / administrator) ============
+(function () {
+    const ROLE_TABS = {
+        user:     ['upload', 'auth'],
+        analityk: ['analyst', 'auth'],
+        admin:    ['upload', 'analyst', 'admin', 'auth'],
+    };
+    const DEFAULT_TAB = { user: 'upload', analityk: 'analyst', admin: 'upload' };
+    let currentRole = null;   // null => niezalogowany
+
+    function activateTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === tab));
+    }
+
+    function tabsForRole(role) {
+        return ROLE_TABS[role] || ['upload', 'auth'];   // niezalogowany => Wczytaj dane + Konto
+    }
+    function homeTab(role) {
+        const allowed = tabsForRole(role);
+        // niezalogowany / brak domyślnej => pierwsza dozwolona ('upload')
+        return (DEFAULT_TAB[role] && allowed.includes(DEFAULT_TAB[role])) ? DEFAULT_TAB[role] : allowed[0];
+    }
+
+    // Pokaż tylko zakładki dozwolone dla roli (null => niezalogowany => Wczytaj dane + Konto)
+    function applyRole(role) {
+        currentRole = role;
+        const allowed = tabsForRole(role);
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.style.display = allowed.includes(btn.dataset.tab) ? '' : 'none';
+        });
+        const activeBtn = document.querySelector('.tab-btn.active');
+        const activeTab = activeBtn ? activeBtn.dataset.tab : null;
+        if (!activeTab || !allowed.includes(activeTab)) {
+            activateTab(homeTab(role));
+        }
+    }
+    window.applyRole = applyRole;
+
+    // Klik w logo => menu główne właściwe dla roli (gość => Wczytaj dane)
+    const brand = document.getElementById('brand');
+    if (brand) brand.addEventListener('click', () => activateTab(homeTab(currentRole)));
+
+    // --- Pomocnicze ---
+    function esc(s) {
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function renderTable(rows) {
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return '<p style="color:#888;padding:12px;">Brak rekordów.</p>';
+        }
+        const cols = Object.keys(rows[0]);
+        let html = '<div class="csv-table-wrapper"><table class="csv-table"><thead><tr>';
+        cols.forEach(c => html += `<th>${esc(c)}</th>`);
+        html += '</tr></thead><tbody>';
+        rows.forEach(r => {
+            html += '<tr>';
+            cols.forEach(c => html += `<td title="${esc(r[c])}">${esc(r[c])}</td>`);
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        return html;
+    }
+    async function detail(res, fallback) {
+        try {
+            const d = await res.json();
+            if (typeof d.detail === 'string') return d.detail;
+            if (Array.isArray(d.detail)) return d.detail.map(x => x.msg).join(', ');
+        } catch (e) { /* brak JSON-a */ }
+        return fallback;
+    }
+
+    // ---------- PANEL ANALITYKA: GET /records ----------
+    const recStatus  = document.getElementById('rec-status');
+    const recPurpose = document.getElementById('rec-purpose');
+    const recLimit   = document.getElementById('rec-limit');
+    const recLoad    = document.getElementById('rec-load');
+    const recPrev    = document.getElementById('rec-prev');
+    const recNext    = document.getElementById('rec-next');
+    const recMsg     = document.getElementById('rec-msg');
+    const recTable   = document.getElementById('rec-table');
+    const recPageInfo= document.getElementById('rec-page-info');
+    let recOffset = 0;
+
+    function recShowMsg(text, type) {
+        recMsg.textContent = text;
+        recMsg.className = 'records-msg ' + type;
+        recMsg.style.display = 'block';
+    }
+
+    async function loadRecords() {
+        const limit = parseInt(recLimit.value, 10) || 50;
+        const params = new URLSearchParams();
+        params.set('limit', limit);
+        params.set('offset', recOffset);
+        if (recStatus.value)  params.set('status', recStatus.value);
+        if (recPurpose.value) params.set('purpose', recPurpose.value);
+
+        recShowMsg('⏳ Ładowanie rekordów...', 'info');
+        recLoad.disabled = true;
+        try {
+            const res = await Auth.apiFetch('/records?' + params.toString());
+            if (!res.ok) throw new Error(await detail(res, `Błąd (${res.status})`));
+            const rows = await res.json();
+            recTable.innerHTML = renderTable(rows);
+            recMsg.style.display = 'none';
+            recPageInfo.textContent = rows.length
+                ? `Wiersze ${recOffset + 1}–${recOffset + rows.length}`
+                : `Brak rekordów (offset ${recOffset})`;
+            recPrev.disabled = recOffset === 0;
+            recNext.disabled = rows.length < limit;
+        } catch (err) {
+            recShowMsg('❌ ' + err.message, 'error');
+        } finally {
+            recLoad.disabled = false;
+        }
+    }
+
+    if (recLoad) {
+        recLoad.addEventListener('click', () => { recOffset = 0; loadRecords(); });
+        recPrev.addEventListener('click', () => { const l = parseInt(recLimit.value, 10) || 50; recOffset = Math.max(0, recOffset - l); loadRecords(); });
+        recNext.addEventListener('click', () => { const l = parseInt(recLimit.value, 10) || 50; recOffset += l; loadRecords(); });
+    }
+
+    // ---------- PANEL ADMINISTRATORA: operacje RODO ----------
+    const admEmail = document.getElementById('adm-email');
+    const admMsg   = document.getElementById('adm-msg');
+    const admData  = document.getElementById('adm-data');
+
+    function admShowMsg(text, type) {
+        admMsg.textContent = text;
+        admMsg.className = 'admin-msg ' + type;
+        admMsg.style.display = 'block';
+    }
+    function requireEmail() {
+        const e = admEmail.value.trim();
+        if (!e) { admShowMsg('⚠️ Podaj e-mail osoby.', 'error'); return null; }
+        return e;
+    }
+    async function admCall(path, opts) {
+        admShowMsg('⏳ Przetwarzanie...', 'info');
+        try {
+            const res = await Auth.apiFetch(path, opts || {});
+            if (!res.ok) throw new Error(await detail(res, `Błąd (${res.status})`));
+            return res;
+        } catch (err) {
+            admShowMsg('❌ ' + err.message, 'error');
+            return null;
+        }
+    }
+
+    const admFind = document.getElementById('adm-find');
+    if (admFind) admFind.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        const res = await admCall(`/my-data?email=${encodeURIComponent(email)}`);
+        if (!res) return;
+        const rows = await res.json();
+        admData.innerHTML = renderTable(rows);
+        admShowMsg(rows.length ? `✅ Znaleziono ${rows.length} rekord(ów).` : 'ℹ️ Brak danych dla tego e-maila.', rows.length ? 'success' : 'info');
+    });
+
+    const admExport = document.getElementById('adm-export');
+    if (admExport) admExport.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        const res = await admCall(`/export_data?email=${encodeURIComponent(email)}`);
+        if (!res) return;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `dane_${email}.csv`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        admShowMsg('✅ Pobrano plik CSV.', 'success');
+    });
+
+    const admFreeze = document.getElementById('adm-freeze');
+    if (admFreeze) admFreeze.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        const res = await admCall(`/freeze?email=${encodeURIComponent(email)}`, { method: 'POST' });
+        if (res) admShowMsg('✅ Przetwarzanie zamrożone.', 'success');
+    });
+
+    const admUnfreeze = document.getElementById('adm-unfreeze');
+    if (admUnfreeze) admUnfreeze.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        const res = await admCall(`/un_freeze?email=${encodeURIComponent(email)}`, { method: 'POST' });
+        if (res) admShowMsg('✅ Przetwarzanie odblokowane.', 'success');
+    });
+
+    const admDelete = document.getElementById('adm-delete');
+    if (admDelete) admDelete.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        if (!confirm(`Na pewno usunąć WSZYSTKIE dane dla ${email}? Tej operacji nie można cofnąć.`)) return;
+        const res = await admCall(`/records?email=${encodeURIComponent(email)}`, { method: 'DELETE' });
+        if (res) { admShowMsg('✅ Dane usunięte.', 'success'); admData.innerHTML = ''; }
+    });
+
+    const admEditBtn = document.getElementById('adm-edit-btn');
+    if (admEditBtn) admEditBtn.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        const p = new URLSearchParams({ email });
+        const map = {
+            'adm-edit-first': 'first_name', 'adm-edit-last': 'last_name',
+            'adm-edit-pesel': 'PESEL', 'adm-edit-birth': 'birth_date', 'adm-edit-phone': 'phone'
+        };
+        let any = false;
+        Object.entries(map).forEach(([id, key]) => {
+            const v = document.getElementById(id).value.trim();
+            if (v) { p.set(key, v); any = true; }
+        });
+        if (!any) { admShowMsg('⚠️ Wypełnij przynajmniej jedno pole do zmiany.', 'error'); return; }
+        const res = await admCall(`/change-data?${p.toString()}`);   // backend: GET z query params
+        if (res) admShowMsg('✅ Dane zaktualizowane.', 'success');
+    });
+
+    const admConsentBtn = document.getElementById('adm-consent-btn');
+    if (admConsentBtn) admConsentBtn.addEventListener('click', async () => {
+        const email = requireEmail(); if (!email) return;
+        const p = new URLSearchParams({
+            email,
+            purpose: document.getElementById('adm-consent-purpose').value,
+            consent: document.getElementById('adm-consent-value').value
+        });
+        const res = await admCall(`/change_consent?${p.toString()}`, { method: 'POST' });
+        if (res) admShowMsg('✅ Zgoda zaktualizowana.', 'success');
+    });
+
+    const admPipeBtn = document.getElementById('adm-pipeline-btn');
+    const admPipeOut = document.getElementById('adm-pipeline-out');
+    if (admPipeBtn) admPipeBtn.addEventListener('click', async () => {
+        const res = await admCall('/pipeline/status');
+        if (!res) return;
+        const data = await res.json();
+        admPipeOut.style.display = 'block';
+        admPipeOut.textContent = JSON.stringify(data, null, 2);
+        admShowMsg('✅ Pobrano status pipeline.', 'success');
+    });
+
+    // Start: niezalogowany => tylko zakładka Konto
+    applyRole(null);
+})();
+
+// ============ SEKCJA: LOGOWANIE / REJESTRACJA ============
+(function () {
+    const API = 'http://localhost:8000';
+
+    const emailInput   = document.getElementById('auth-email');
+    const passInput    = document.getElementById('auth-password');
+    const btnLogin     = document.getElementById('btn-login');
+    const btnRegister  = document.getElementById('btn-register');
+    const btnLogout    = document.getElementById('btn-logout');
+    const msgEl        = document.getElementById('auth-message');
+    const msgLoggedEl  = document.getElementById('auth-message-logged');
+
+    const formView     = document.getElementById('auth-form');
+    const loggedView   = document.getElementById('auth-logged');
+    const loggedEmail  = document.getElementById('auth-logged-email');
+    const loggedRole   = document.getElementById('auth-logged-role');
+
+    // --- Pomocnicze: komunikaty ---
+    function showMsg(el, text, type) {
+        el.textContent = text;
+        el.className = 'auth-message ' + type;
+        el.style.display = 'block';
+    }
+    function clearMsg(el) {
+        el.style.display = 'none';
+        el.textContent = '';
+    }
+
+    // --- Dekodowanie payloadu JWT (bez weryfikacji — tylko do wyświetlenia) ---
+    function decodeJwt(token) {
+        try {
+            const payload = token.split('.')[1];
+            const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+            return JSON.parse(decodeURIComponent(escape(json)));
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // --- Walidacja danych wejściowych ---
+    function readCredentials() {
+        const email = emailInput.value.trim();
+        const password = passInput.value;
+        if (!email || !password) {
+            showMsg(msgEl, '⚠️ Podaj login i hasło.', 'error');
+            return null;
+        }
+        return { email, password };
+    }
+
+    // --- Pobranie szczegółu błędu z odpowiedzi FastAPI ---
+    async function errorDetail(response, fallback) {
+        try {
+            const data = await response.json();
+            if (typeof data.detail === 'string') return data.detail;
+            if (Array.isArray(data.detail)) return data.detail.map(d => d.msg).join(', ');
+        } catch (e) { /* ignorujemy */ }
+        return fallback;
+    }
+
+    function setButtonsDisabled(state) {
+        btnLogin.disabled = state;
+        btnRegister.disabled = state;
+    }
+
+    // --- REJESTRACJA: POST /register?email=...&password=... (query params) ---
+    async function register() {
+        const creds = readCredentials();
+        if (!creds) return;
+
+        setButtonsDisabled(true);
+        showMsg(msgEl, '⏳ Rejestracja...', 'info');
+        try {
+            const url = `${API}/register?email=${encodeURIComponent(creds.email)}&password=${encodeURIComponent(creds.password)}`;
+            const response = await fetch(url, { method: 'POST' });
+            if (!response.ok) {
+                throw new Error(await errorDetail(response, `Błąd rejestracji (${response.status})`));
+            }
+            showMsg(msgEl, '✅ Konto utworzone! Możesz się teraz zalogować.', 'success');
+        } catch (err) {
+            showMsg(msgEl, '❌ ' + err.message, 'error');
+        } finally {
+            setButtonsDisabled(false);
+        }
+    }
+
+    // --- LOGOWANIE: POST /login (OAuth2PasswordRequestForm => form-urlencoded) ---
+    async function login() {
+        const creds = readCredentials();
+        if (!creds) return;
+
+        setButtonsDisabled(true);
+        showMsg(msgEl, '⏳ Logowanie...', 'info');
+        try {
+            const body = new URLSearchParams();
+            body.append('username', creds.email);   // backend oczekuje pola "username"
+            body.append('password', creds.password);
+
+            const response = await fetch(`${API}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            if (!response.ok) {
+                throw new Error(await errorDetail(response, `Błąd logowania (${response.status})`));
+            }
+            const data = await response.json();
+            localStorage.setItem('access_token', data.access_token);
+            if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+            renderLoggedIn(data.access_token);
+        } catch (err) {
+            showMsg(msgEl, '❌ ' + err.message, 'error');
+        } finally {
+            setButtonsDisabled(false);
+        }
+    }
+
+    // --- WYLOGOWANIE: POST /logout (Bearer token) ---
+    async function logout() {
+        const token = localStorage.getItem('access_token');
+        btnLogout.disabled = true;
+        try {
+            if (token) {
+                await fetch(`${API}/logout`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+            }
+        } catch (e) {
+            // nawet przy błędzie sieci czyścimy sesję lokalnie
+        } finally {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            btnLogout.disabled = false;
+            renderLoggedOut();
+            showMsg(msgEl, 'ℹ️ Wylogowano.', 'info');
+        }
+    }
+
+    // --- Przełączanie widoków ---
+    function renderLoggedIn(token) {
+        const payload = decodeJwt(token);
+        loggedEmail.textContent = payload && payload.sub ? payload.sub : (emailInput.value.trim() || '—');
+        loggedRole.textContent  = payload && payload.role ? 'Rola: ' + payload.role : '';
+        clearMsg(msgEl);
+        clearMsg(msgLoggedEl);
+        passInput.value = '';
+        formView.style.display = 'none';
+        loggedView.style.display = 'block';
+        if (window.applyRole) window.applyRole(payload && payload.role);
+    }
+
+    function renderLoggedOut() {
+        formView.style.display = 'block';
+        loggedView.style.display = 'none';
+        if (window.applyRole) window.applyRole(null);
+    }
+
+    // --- Inicjalizacja: ważny access => zalogowany; wygasły => spróbuj odświeżyć refresh tokenem ---
+    async function init() {
+        const token = localStorage.getItem('access_token');
+        if (token && !Auth.isExpired(token)) {
+            renderLoggedIn(token);
+            return;
+        }
+        const newToken = await Auth.refreshAccessToken();
+        if (newToken) {
+            renderLoggedIn(newToken);
+        } else {
+            Auth.clear();
+            renderLoggedOut();
+        }
+    }
+
+    btnLogin.addEventListener('click', login);
+    btnRegister.addEventListener('click', register);
+    btnLogout.addEventListener('click', logout);
+
+    // Enter w polu hasła => logowanie
+    passInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') login();
+    });
+
+    // apiFetch wymusił wylogowanie (refresh padł / sesja wygasła)
+    document.addEventListener('auth:logout', () => {
+        renderLoggedOut();
+        showMsg(msgEl, 'ℹ️ Sesja wygasła — zaloguj się ponownie.', 'info');
+    });
+
+    init();
 }());
