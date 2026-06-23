@@ -10,7 +10,7 @@
 
 // ============ WSPÓLNA WARSTWA AUTORYZACJI (tokeny + apiFetch) ============
 const Auth = (function () {
-    const API = 'http://localhost:8000';
+    const API = 'https://rodo-mawb.onrender.com';
 
     const getAccess  = () => localStorage.getItem('access_token');
     const getRefresh = () => localStorage.getItem('refresh_token');
@@ -699,7 +699,7 @@ const Auth = (function () {
 
 // ============ SEKCJA: LOGOWANIE / REJESTRACJA ============
 (function () {
-    const API = 'http://localhost:8000';
+    const API = 'https://rodo-mawb.onrender.com';
 
     const emailInput   = document.getElementById('auth-email');
     const passInput    = document.getElementById('auth-password');
