@@ -11,17 +11,22 @@ podziałem ról.
 
 ## 📐 Architektura
 
-```
-   Przeglądarka (frontend statyczny)            Backend (FastAPI)             Baza
-   ──────────────────────────────              ─────────────────             ────
-   index.html / script.js / style.css   HTTPS   • middleware: CORS,          Azure SQL
-   • interfejs sterowany rolą          ───────▶   nagłówki, rate-limit       ──────────
-   • upload, panele analityk/admin      JWT      • auth: Argon2 + JWT + role  raw_records
-   • podgląd JSON/CSV                    Bearer   • endpointy REST             clean_records
-                                                  • pipeline ETL (extract →    keys
-                                                    transform → load)          audit_log
-                                                          │ sqlalchemy + pyodbc
-                                                          ▼
+```mermaid
+flowchart LR
+    subgraph FE["🖥️ Frontend (statyczny)"]
+        F["index.html · script.js · style.css<br/>• interfejs sterowany rolą<br/>• upload, panele analityk/admin<br/>• podgląd JSON/CSV"]
+    end
+
+    subgraph BE["⚙️ Backend — FastAPI"]
+        B["• middleware: CORS, nagłówki, rate-limit<br/>• auth: Argon2 + JWT + role<br/>• endpointy REST<br/>• pipeline ETL: extract → transform → load"]
+    end
+
+    subgraph DB["🗄️ Azure SQL"]
+        D["raw_records<br/>clean_records<br/>keys<br/>audit_log"]
+    end
+
+    F -->|"HTTPS · JWT Bearer"| B
+    B -->|"SQLAlchemy + pyodbc"| D
 ```
 
 **Kluczowe decyzje:**
