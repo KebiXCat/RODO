@@ -198,3 +198,10 @@ Obraz instaluje sterownik `msodbcsql18` i startuje Uvicorn na porcie `${PORT:-10
 ## 📄 Licencja
 
 Projekt edukacyjny — używaj swobodnie w celach dydaktycznych. 🎓
+
+---
+
+## 👤 Autor
+
+**Miłosz Płocki**
+[LinkedIn](https://www.linkedin.com/in/mi%C5%82osz-p%C5%82ocki-5b3439400/)

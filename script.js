@@ -49,6 +49,18 @@ function comparatorFor(type) {
     return (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'pl', { numeric: false });
 }
 
+// ============ WSPÓLNE TŁUMACZENIE BŁĘDÓW SIECIOWYCH ============
+// fetch() przy braku połączenia rzuca natywny komunikat przeglądarki
+// ("Failed to fetch" / "NetworkError..." / "Load failed"). Tłumaczymy go na polski;
+// komunikaty z backendu (pole "detail") przepuszczamy bez zmian.
+function friendlyError(err) {
+    const msg = (err && err.message) ? String(err.message) : '';
+    if (!msg || /failed to fetch|networkerror|load failed|fetch resource/i.test(msg)) {
+        return 'Błąd serwera. Spróbuj ponownie.';
+    }
+    return msg;
+}
+
 // ============ WSPÓLNA WARSTWA AUTORYZACJI (tokeny + apiFetch) ============
 const Auth = (function () {
     const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
@@ -305,8 +317,8 @@ const Auth = (function () {
             btnLoadAnother.style.display = '';
         }
         catch(error){
-            console.error(error.message);
-            showPipelineStatus('error', error.message);
+            console.error(error);
+            showPipelineStatus('error', friendlyError(error));
             // Błąd: zostaw możliwość ponowienia oraz wczytania kolejnego pliku
             btnSendPipeline.disabled = false;
             btnLoadAnother.style.display = '';
@@ -686,7 +698,7 @@ const Auth = (function () {
             recPrev.disabled = recOffset === 0;
             recNext.disabled = rows.length < limit;
         } catch (err) {
-            recShowMsg('❌ ' + err.message, 'error');
+            recShowMsg('❌ ' + friendlyError(err), 'error');
         } finally {
             recLoading.style.display = 'none';
             recLoad.disabled = false;
@@ -694,7 +706,14 @@ const Auth = (function () {
     }
 
     if (recLoad) {
-        recLoad.addEventListener('click', () => { recOffset = 0; loadRecords(); });
+        recLoad.addEventListener('click', () => {
+            recOffset = 0;
+            loadRecords();
+            recLoad.style.display = 'none';   // przycisk potrzebny tylko do pierwszego załadowania
+        });
+        // po ukryciu przycisku filtry odświeżają listę automatycznie
+        [recStatus, recPurpose, recLimit].forEach(el =>
+            el.addEventListener('change', () => { recOffset = 0; loadRecords(); }));
         recPrev.addEventListener('click', () => { const l = parseInt(recLimit.value, 10) || 50; recOffset = Math.max(0, recOffset - l); loadRecords(); });
         recNext.addEventListener('click', () => { const l = parseInt(recLimit.value, 10) || 50; recOffset += l; loadRecords(); });
     }
@@ -721,19 +740,23 @@ const Auth = (function () {
             if (!res.ok) throw new Error(await detail(res, `Błąd (${res.status})`));
             return res;
         } catch (err) {
-            admShowMsg('❌ ' + err.message, 'error');
+            admShowMsg('❌ ' + friendlyError(err), 'error');
             return null;
         }
     }
 
-    const admFind = document.getElementById('adm-find');
-    if (admFind) admFind.addEventListener('click', async () => {
-        const email = requireEmail(); if (!email) return;
+    async function showMyData(email) {
         const res = await admCall(`/my-data?email=${encodeURIComponent(email)}`);
         if (!res) return;
         const rows = await res.json();
         makeSortable(admData, rows);
-        admShowMsg(rows.length ? `✅ Znaleziono ${rows.length} rekord(ów).` : 'ℹ️ Brak danych dla tego e-maila.', rows.length ? 'success' : 'info');
+        admShowMsg(rows.length ? `✅ Znaleziono ${rows.length} rekord(ów).` : '❌ Brak danych dla tego e-maila', rows.length ? 'success' : 'error');
+    }
+
+    const admFind = document.getElementById('adm-find');
+    if (admFind) admFind.addEventListener('click', () => {
+        const email = requireEmail(); if (!email) return;
+        showMyData(email);
     });
 
     const admExport = document.getElementById('adm-export');
@@ -754,14 +777,14 @@ const Auth = (function () {
     if (admFreeze) admFreeze.addEventListener('click', async () => {
         const email = requireEmail(); if (!email) return;
         const res = await admCall(`/freeze?email=${encodeURIComponent(email)}`, { method: 'POST' });
-        if (res) admShowMsg('✅ Przetwarzanie zamrożone.', 'success');
+        if (res) await showMyData(email);
     });
 
     const admUnfreeze = document.getElementById('adm-unfreeze');
     if (admUnfreeze) admUnfreeze.addEventListener('click', async () => {
         const email = requireEmail(); if (!email) return;
         const res = await admCall(`/un_freeze?email=${encodeURIComponent(email)}`, { method: 'POST' });
-        if (res) admShowMsg('✅ Przetwarzanie odblokowane.', 'success');
+        if (res) await showMyData(email);
     });
 
     const admDelete = document.getElementById('adm-delete');
@@ -787,7 +810,7 @@ const Auth = (function () {
         });
         if (!any) { admShowMsg('⚠️ Wypełnij przynajmniej jedno pole do zmiany.', 'error'); return; }
         const res = await admCall(`/change-data?${p.toString()}`);   // backend: GET z query params
-        if (res) admShowMsg('✅ Dane zaktualizowane.', 'success');
+        if (res) await showMyData(email);
     });
 
     const admConsentBtn = document.getElementById('adm-consent-btn');
@@ -799,7 +822,7 @@ const Auth = (function () {
             consent: document.getElementById('adm-consent-value').value
         });
         const res = await admCall(`/change_consent?${p.toString()}`, { method: 'POST' });
-        if (res) admShowMsg('✅ Zgoda zaktualizowana.', 'success');
+        if (res) await showMyData(email);
     });
 
     const admPipeBtn = document.getElementById('adm-pipeline-btn');
@@ -899,7 +922,7 @@ const Auth = (function () {
             }
             showMsg(msgEl, '✅ Konto utworzone! Możesz się teraz zalogować.', 'success');
         } catch (err) {
-            showMsg(msgEl, '❌ ' + err.message, 'error');
+            showMsg(msgEl, '❌ ' + friendlyError(err), 'error');
         } finally {
             setButtonsDisabled(false);
         }
@@ -930,7 +953,7 @@ const Auth = (function () {
             if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
             renderLoggedIn(data.access_token);
         } catch (err) {
-            showMsg(msgEl, '❌ ' + err.message, 'error');
+            showMsg(msgEl, '❌ ' + friendlyError(err), 'error');
         } finally {
             setButtonsDisabled(false);
         }

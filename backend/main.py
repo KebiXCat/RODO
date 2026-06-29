@@ -8,6 +8,7 @@ from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import os
+import tempfile
 from datetime import datetime
 from backend.auth import blacklisted_tokens, oauth2_scheme
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -67,23 +68,22 @@ def get_records(request: Request, current_user = Depends(require_role(["admin", 
     return df.to_dict(orient="records")
 @app.post("/pipeline/run")
 @limiter.limit("30/minute")
-async def run_pipeline(request: Request, file: UploadFile = File(...), current_user = Depends(require_role(["admin", "user"]))):
+def run_pipeline(request: Request, file: UploadFile = File(...), current_user = Depends(require_role(["admin", "user"]))):
 
     global pipeline_status
     pipeline_status = {
         "status" : "running",
         "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-    path = f"{file.filename}"
-    with open(file.filename, "wb") as f:
-        content = await file.read()
-        f.write(content)
     if file.filename.endswith(".csv"):
         source = "csv"
     elif file.filename.endswith(".json"):
         source = "json"
     else:
         raise HTTPException(status_code=400, detail="Zły format pliku")
+    fd, path = tempfile.mkstemp(suffix=f".{source}")
+    with os.fdopen(fd, "wb") as f:
+        f.write(file.file.read())
     #print(f"Ścieżka pliku: {f}")
     #print(f"Źródło: {source}")
     try:  
@@ -95,6 +95,13 @@ async def run_pipeline(request: Request, file: UploadFile = File(...), current_u
         "records" : len(df),
         "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
+    except ValueError as e:
+        pipeline_status = {
+        "status" : "failed",
+        "errors" : str(e),
+        "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         pipeline_status = {
         "status" : "failed",
@@ -102,7 +109,9 @@ async def run_pipeline(request: Request, file: UploadFile = File(...), current_u
         "start" : datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         raise HTTPException(status_code=500, detail="Błąd serwera")
-    os.remove(path)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
     return {"message": f"pipeline run, ingested {len(df)} records"}
 @app.get("/pipeline/status")
 @limiter.limit("30/minute")
@@ -178,6 +187,8 @@ def get_my_data(request: Request, email: str, current_user = Depends(require_rol
 @app.get("/change-data")
 @limiter.limit("10/minute")
 def change_my_data(request: Request, email: str, first_name: str= None, last_name: str=None, PESEL: str=None, birth_date: str = None, phone: str = None, current_user = Depends(require_role(["admin"]))):
+    if fetch_my_data(email).empty:
+        raise HTTPException(status_code=404, detail="Brak danych dla tego e-maila")
     if first_name or last_name or PESEL or birth_date:
         updates = []
         params = {}
@@ -230,22 +241,25 @@ def change_my_data(request: Request, email: str, first_name: str= None, last_nam
 @app.delete("/records")
 @limiter.limit("10/minute")
 def delete_my_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
-    query1 = """
+    if fetch_my_data(email).empty:
+        raise HTTPException(status_code=404, detail="Brak danych dla tego e-maila")
+    query_keys = """
+    DELETE k
+    FROM keys k
+    JOIN clean_records c ON k.id = c.id
+    WHERE c.email = :email
+    """
+    query_clean = """
     DELETE FROM clean_records OUTPUT DELETED.id WHERE email = :email
     """
-    query2 = """
-    DELETE FROM raw_record WHERE email = :email
-    """
-    query3 = """
-    DELETE FROM keys k
-    JOIN clean_records c ON k.id = c.id
-    WHERE email = :email
+    query_raw = """
+    DELETE FROM raw_records WHERE email = :email
     """
     with engine.connect() as conn:
-        result1 = conn.execute(text(query1), {"email" : email})
-        ids = [row[0] for row in result1.fetchall()]
-        conn.execute(text(query2),{"email" : email})
-        conn.execute(text(query3), {"email" : email})
+        conn.execute(text(query_keys), {"email" : email}) 
+        result = conn.execute(text(query_clean), {"email" : email}) 
+        ids = [row[0] for row in result.fetchall()]
+        conn.execute(text(query_raw), {"email" : email})   
         for i in ids:
             add_to_audit("DELETE", "keys, clean_records, raw_records", current_user["email"], i, details="delete_my_data")
         conn.commit()
@@ -254,6 +268,8 @@ def delete_my_data(request: Request, email: str, current_user = Depends(require_
 @limiter.limit("10/minute")
 def export_data(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
     df = fetch_my_data(email)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="Brak danych dla tego e-maila")
     df_csv = df.to_csv(index=False)
     add_to_audit("SELECT", "clean_records", current_user["email"], details=f"export_data: {email}")
     return Response(
@@ -264,17 +280,25 @@ def export_data(request: Request, email: str, current_user = Depends(require_rol
         }
     )
 def add_record(df: pd.DataFrame, current_user):
-    csv_plik = df.to_csv("add.csv", index=False)
-    data = transform("add.csv", "csv")
-    IngestEverything(data)
-    os.remove("add.csv")
+    fd, path = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    df.to_csv(path, index=False)
+    try:
+        data = transform(path, "csv")
+        IngestEverything(data)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
     purpose = df["purpose"].iloc[0]
     email = df["email"].iloc[0]
-    id = pd.read_sql("SELECT TOP 1 id FROM clean_records WHERE purpose = ? AND email = ?", engine, params=[(purpose, email)])
-    add_to_audit("INSERT", "clean_records, keys, raw_records", current_user["email"], id, "Dodano nową zgodę")
+    id_df = pd.read_sql("SELECT TOP 1 id FROM clean_records WHERE purpose = ? AND email = ?", engine, params=[(purpose, email)])
+    record_id = int(id_df["id"].iloc[0]) if not id_df.empty else None
+    add_to_audit("INSERT", "clean_records, keys, raw_records", current_user["email"], record_id, "Dodano nową zgodę")
 @app.post("/change_consent")
 @limiter.limit("10/minute")
 def change_consent(request: Request, email: str, purpose: str, consent: bool, current_user = Depends(require_role(["admin"]))):
+    if fetch_my_data(email).empty:
+        raise HTTPException(status_code=404, detail="Brak danych dla tego e-maila")
     with engine.connect() as conn:
         existing = pd.read_sql("SELECT id FROM clean_records WHERE email = ? AND purpose = ?", engine, params=[(email, purpose)])
         query1 = """
@@ -306,6 +330,8 @@ def change_consent(request: Request, email: str, purpose: str, consent: bool, cu
 @app.post("/freeze")
 @limiter.limit("10/minute")
 def freeze(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    if fetch_my_data(email).empty:
+        raise HTTPException(status_code=404, detail="Brak danych dla tego e-maila")
     with engine.connect() as conn:
         query = """
             UPDATE clean_records SET processing_frozen = 1
@@ -317,6 +343,8 @@ def freeze(request: Request, email: str, current_user = Depends(require_role(["a
 @app.post("/un_freeze")
 @limiter.limit("10/minute")
 def un_freeze(request: Request, email: str, current_user = Depends(require_role(["admin"]))):
+    if fetch_my_data(email).empty:
+        raise HTTPException(status_code=404, detail="Brak danych dla tego e-maila")
     with engine.connect() as conn:
         query = """
             UPDATE clean_records SET processing_frozen = 0

@@ -1,6 +1,7 @@
 import pandas as pd
 from datetime import datetime
 from pipeline.load import loadIntoAzure
+
 def extract(link, source):
     try:
         if(source == "csv"):
@@ -12,6 +13,11 @@ def extract(link, source):
         return None
     print(f"path: {link}, source: {source}")
     allColumns = ['first_name', 'last_name', 'email', 'phone', 'birth_date', 'purpose', 'consent', 'PESEL']
+    missing = [c for c in allColumns if c not in df.columns]
+    if missing:
+        if len(missing) == 1:
+            raise ValueError(f"Brak kolumny '{missing[0]}' w pliku. Dodaj tę kolumnę i spróbuj ponownie.")
+        raise ValueError(f"Brak kolumn w pliku: {', '.join(missing)}. Dodaj te kolumny i spróbuj ponownie.")
     df = df[allColumns]
     df["created_at"] = datetime.now().replace(microsecond=0)
     df["birth_date"] = pd.to_datetime(df["birth_date"]).dt.date
