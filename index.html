@@ -12,7 +12,7 @@
           content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:8000 https://rodo-1.onrender.com; font-src 'self'; base-uri 'self'; form-action 'self';">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
     <header class="header">
@@ -32,13 +32,31 @@
             <!-- LEWA KOLUMNA: Formularz wczytywania -->
             <div class="panel upload-panel">
                 <h2>📁 Wczytaj plik danych</h2>
-                <p class="upload-desc">Załaduj plik JSON lub CSV — dane są przetwarzane wyłącznie lokalnie w przeglądarce, nigdy nie opuszczają Twojego urządzenia.</p>
+                <p class="upload-desc">Załaduj plik JSON lub CSV o rozmiarze <strong>do 50 MB</strong>.</p>
+
+                <div class="upload-instructions">
+                    <div class="upload-instructions-head">
+                        <strong>📋 Jak przygotować plik</strong>
+                        <button class="template-btn" id="btn-download-template" type="button">⬇️ Pobierz szablon CSV</button>
+                    </div>
+                    <p>Plik musi zawierać poniższe kolumny (nazwy nagłówków po angielsku — pobierz szablon, aby ich nie wpisywać ręcznie):</p>
+                    <ul class="upload-cols">
+                        <li><code>first_name</code> — imię</li>
+                        <li><code>last_name</code> — nazwisko</li>
+                        <li><code>PESEL</code> — numer PESEL</li>
+                        <li><code>email</code> — adres e-mail</li>
+                        <li><code>phone</code> — numer telefonu</li>
+                        <li><code>birth_date</code> — data urodzenia (RRRR-MM-DD)</li>
+                        <li><code>purpose</code> — cel: <em>rekrutacja</em>, <em>marketing</em> lub <em>obsługa klienta</em></li>
+                        <li><code>consent</code> — zgoda: <em>True</em> lub <em>False</em></li>
+                    </ul>
+                </div>
 
                 <div class="dropzone" id="dropzone">
                     <div class="dropzone-icon">📂</div>
                     <div class="dropzone-text">Przeciągnij i upuść plik tutaj</div>
                     <div class="dropzone-sub">lub kliknij, aby wybrać</div>
-                    <div class="dropzone-types">Obsługiwane formaty: <strong>.json</strong> · <strong>.csv</strong></div>
+                    <div class="dropzone-types">Obsługiwane formaty: <strong>.json</strong> · <strong>.csv</strong> · maks. rozmiar <strong>50 MB</strong></div>
                     <input type="file" id="file-input" accept=".json,.csv" style="display:none;">
                 </div>
 
@@ -79,7 +97,7 @@
                     <div class="gdpr-note-icon">🔒</div>
                     <div>
                         <strong>Ochrona danych RODO</strong><br>
-                        Plik nie jest wysyłany na żaden serwer. Cała analiza odbywa się po stronie klienta (client-side) za pomocą Web File API.
+                        Dane przetwarzane są zgodnie z zasadami RODO.
                     </div>
                 </div>
             </div>
@@ -151,7 +169,12 @@
             </div>
 
             <div class="records-msg" id="rec-msg" style="display:none;"></div>
-            <div id="rec-table"></div>
+            <div class="rec-table-wrap" id="rec-table-wrap">
+                <div id="rec-table"></div>
+                <div class="rec-loading-overlay" id="rec-loading" style="display:none;">
+                    <span class="rec-loading-spinner">⏳</span> Ładowanie rekordów...
+                </div>
+            </div>
 
             <div class="records-pager">
                 <button class="act-btn" id="rec-prev" type="button" disabled>‹ Poprzednie</button>
@@ -278,6 +301,6 @@
         <p>Projekt edukacyjny • GDPR Live Inspector</p>
     </footer>
 
-    <script src="script.js?v=5" defer></script>
+    <script src="script.js?v=9" defer></script>
 </body>
 </html>

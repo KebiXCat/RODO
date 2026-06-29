@@ -1483,6 +1483,65 @@
             flex-shrink: 0;
         }
 
+        /* Instrukcja przygotowania pliku */
+        .upload-instructions {
+            background: rgba(74, 158, 255, 0.08);
+            border: 1px solid rgba(74, 158, 255, 0.25);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+            color: #bbb;
+            line-height: 1.55;
+        }
+
+        .upload-instructions-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .upload-instructions-head strong {
+            color: #4a9eff;
+            font-size: 0.95rem;
+        }
+
+        .template-btn {
+            background: #4a9eff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .template-btn:hover {
+            background: #3a8eef;
+        }
+
+        .upload-cols {
+            margin: 6px 0 0;
+            padding-left: 18px;
+        }
+
+        .upload-cols li {
+            margin: 3px 0;
+        }
+
+        .upload-cols code {
+            background: rgba(0,0,0,0.35);
+            color: #4a9eff;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
         /* Prawa kolumna — podgląd */
         .preview-panel {
             min-height: 500px;
@@ -1875,6 +1934,36 @@
             border-radius: 10px;
             font-size: 0.9rem;
             line-height: 1.5;
+        }
+
+        /* Tabela rekordów + nakładka ładowania (bez przeskoku układu) */
+        .rec-table-wrap {
+            position: relative;
+            min-height: 60px;
+        }
+
+        .rec-loading-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 10px;
+            color: #7ec8ff;
+            font-size: 0.95rem;
+            z-index: 5;
+        }
+
+        .rec-loading-spinner {
+            display: inline-block;
+            margin-right: 8px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
         }
 
         .records-msg.error,

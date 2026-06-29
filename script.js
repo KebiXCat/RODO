@@ -8,6 +8,47 @@
             });
         });
 
+// ============ WSPÓLNE NARZĘDZIA SORTOWANIA TABEL (klikalne nagłówki) ============
+// dd-mm-yyyy -> 'yyyymmdd' (porównywalny string); inaczej null
+function dmyToSortable(v) {
+    const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(v ?? '').trim());
+    return m ? m[3] + m[2] + m[1] : null;
+}
+// liczba "czysta" = round-trip identyczny. "0123" odpada (wiodące 0) -> PESEL leci jako tekst
+function isPlainNumber(v) {
+    const s = String(v ?? '').trim();
+    return s !== '' && String(Number(s)) === s;
+}
+// Typ kolumny ustalany RAZ na podstawie WSZYSTKICH wartości (spójne, transitywne sortowanie)
+function detectType(values) {
+    let any = false, allNum = true, allDate = true;
+    for (const v of values) {
+        if (v === '' || v == null) continue;        // puste pomijamy przy wykrywaniu typu
+        any = true;
+        if (dmyToSortable(v) !== null) { allNum = false; continue; }
+        allDate = false;
+        if (!isPlainNumber(v)) allNum = false;
+    }
+    if (!any) return 'str';
+    if (allDate) return 'date';
+    if (allNum)  return 'num';                       // tylko gdy NIC nie ma wiodącego zera
+    return 'str';
+}
+function comparatorFor(type) {
+    if (type === 'num') {
+        return (a, b) => {
+            const x = (a === '' || a == null) ? Infinity : Number(a);
+            const y = (b === '' || b == null) ? Infinity : Number(b);
+            return x - y;                            // puste na koniec
+        };
+    }
+    if (type === 'date') {
+        return (a, b) => (dmyToSortable(a) ?? '99999999').localeCompare(dmyToSortable(b) ?? '99999999');
+    }
+    // tekst: ścisły leksykalny (numeric:false), żeby PESEL z wiodącym 0 sortował się poprawnie
+    return (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'pl', { numeric: false });
+}
+
 // ============ WSPÓLNA WARSTWA AUTORYZACJI (tokeny + apiFetch) ============
 const Auth = (function () {
     const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
@@ -100,6 +141,7 @@ const Auth = (function () {
     let currentFileType = '';
     let currentView     = 'formatted';
     let currentFile     = null;
+    let csvSort         = null;   // { col: indexKolumny, dir: 'asc'|'desc' } | null = kolejność z pliku
     const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
     // --- Dropzone kliknięcie ---
@@ -140,6 +182,23 @@ const Auth = (function () {
 
     // --- Wyczyść plik ---
     fileClearBtn.addEventListener('click', clearFile);
+
+    // --- Pobierz szablon CSV (poprawne nagłówki wymagane przez backend + przykładowy wiersz) ---
+    const btnDownloadTemplate = document.getElementById('btn-download-template');
+    if (btnDownloadTemplate) btnDownloadTemplate.addEventListener('click', () => {
+        const header  = 'first_name,last_name,PESEL,email,phone,birth_date,purpose,consent';
+        const example = 'Jan,Kowalski,90050512345,jan.kowalski@example.com,512 345 678,1990-05-12,rekrutacja,True';
+        const csv = '﻿' + header + '\n' + example + '\n';   // BOM => poprawne polskie znaki w Excelu
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'szablon_danych.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    });
 
     // --- Kopiuj do schowka ---
     btnCopy.addEventListener('click', () => {
@@ -299,6 +358,7 @@ const Auth = (function () {
         currentFileText = '';
         currentFileType = '';
         currentFile     = null;
+        csvSort         = null;
         btnSendPipeline.style.display = 'none';
         btnLoadAnother.style.display  = 'none';
         pipelineAction.style.display  = 'none';
@@ -360,16 +420,29 @@ const Auth = (function () {
         const dataRows = lines.slice(1).map(l => parseCSVLine(l, sep));
 
         const maxPreview = 500;
-        const displayed = dataRows.slice(0, maxPreview);
         const truncated = dataRows.length > maxPreview;
+        // zachowujemy oryginalny numer wiersza (n) — kolumna "#" pokazuje go nawet po sortowaniu
+        let displayed = dataRows.slice(0, maxPreview).map((row, i) => ({ n: i + 1, row }));
+
+        if (csvSort) {
+            const cmp = comparatorFor(detectType(displayed.map(d => d.row[csvSort.col] ?? '')));
+            displayed = [...displayed].sort((a, b) => {
+                const r = cmp(a.row[csvSort.col] ?? '', b.row[csvSort.col] ?? '');
+                return csvSort.dir === 'asc' ? r : -r;
+            });
+        }
+
+        const arrow = (ci) => csvSort && csvSort.col === ci ? (csvSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
 
         let html = '<div class="csv-table-wrapper"><table class="csv-table"><thead><tr>';
         html += `<th class="row-num">#</th>`;
-        headers.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
+        headers.forEach((h, ci) => {
+            html += `<th data-col="${ci}" style="cursor:pointer;user-select:none" title="Kliknij, aby sortować">${escapeHtml(h)}${arrow(ci)}</th>`;
+        });
         html += '</tr></thead><tbody>';
 
-        displayed.forEach((row, i) => {
-            html += `<tr><td class="row-num">${i + 1}</td>`;
+        displayed.forEach(({ n, row }) => {
+            html += `<tr><td class="row-num">${n}</td>`;
             headers.forEach((_, ci) => {
                 html += `<td title="${escapeHtml(row[ci] ?? '')}">${escapeHtml(row[ci] ?? '')}</td>`;
             });
@@ -382,6 +455,15 @@ const Auth = (function () {
         }
 
         previewContent.innerHTML = html;
+        previewContent.onclick = (e) => {
+            const th = e.target.closest('th[data-col]');
+            if (!th || !previewContent.contains(th)) return;
+            const col = parseInt(th.dataset.col, 10);
+            csvSort = (csvSort && csvSort.col === col && csvSort.dir === 'asc')
+                ? { col, dir: 'desc' }
+                : { col, dir: 'asc' };
+            renderCSV();
+        };
         updateStats({ rows: dataRows.length, cols: headers.length, chars: currentFileText.length, type: 'CSV' });
     }
 
@@ -504,13 +586,16 @@ const Auth = (function () {
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
-    function renderTable(rows) {
+    function renderTable(rows, st) {
         if (!Array.isArray(rows) || rows.length === 0) {
             return '<p style="color:#888;padding:12px;">Brak rekordów.</p>';
         }
         const cols = Object.keys(rows[0]);
         let html = '<div class="csv-table-wrapper"><table class="csv-table"><thead><tr>';
-        cols.forEach(c => html += `<th>${esc(c)}</th>`);
+        cols.forEach(c => {
+            const arrow = st && st.col === c ? (st.dir === 'asc' ? ' ▲' : ' ▼') : '';
+            html += `<th data-col="${esc(c)}" style="cursor:pointer;user-select:none" title="Kliknij, aby sortować">${esc(c)}${arrow}</th>`;
+        });
         html += '</tr></thead><tbody>';
         rows.forEach(r => {
             html += '<tr>';
@@ -519,6 +604,37 @@ const Auth = (function () {
         });
         html += '</tbody></table></div>';
         return html;
+    }
+
+    // ---------- SORTOWANIE TABEL (klikalne nagłówki, po stronie frontu) ----------
+    // Czyste funkcje porównujące (dmyToSortable / isPlainNumber / detectType / comparatorFor)
+    // są wspólne i zdefiniowane na górze pliku.
+    const sortState = new WeakMap();   // kontener -> { col, dir }
+
+    // Renderuje tabelę z sortowaniem do podanego kontenera i podpina klik w nagłówki.
+    function makeSortable(container, rows) {
+        const draw = () => {
+            const st = sortState.get(container);
+            let view = rows;
+            if (st && Array.isArray(rows) && rows.length) {
+                const cmp = comparatorFor(detectType(rows.map(r => r[st.col])));
+                view = [...rows].sort((a, b) => {
+                    const r = cmp(a[st.col], b[st.col]);
+                    return st.dir === 'asc' ? r : -r;
+                });
+            }
+            container.innerHTML = renderTable(view, st);
+        };
+        container.onclick = (e) => {
+            const th = e.target.closest('th[data-col]');
+            if (!th || !container.contains(th)) return;
+            const col = th.dataset.col;
+            const cur = sortState.get(container);
+            const dir = (cur && cur.col === col && cur.dir === 'asc') ? 'desc' : 'asc';
+            sortState.set(container, { col, dir });   // klik: brak -> asc -> desc -> asc...
+            draw();
+        };
+        draw();
     }
     async function detail(res, fallback) {
         try {
@@ -538,6 +654,7 @@ const Auth = (function () {
     const recNext    = document.getElementById('rec-next');
     const recMsg     = document.getElementById('rec-msg');
     const recTable   = document.getElementById('rec-table');
+    const recLoading = document.getElementById('rec-loading');
     const recPageInfo= document.getElementById('rec-page-info');
     let recOffset = 0;
 
@@ -555,14 +672,14 @@ const Auth = (function () {
         if (recStatus.value)  params.set('status', recStatus.value);
         if (recPurpose.value) params.set('purpose', recPurpose.value);
 
-        recShowMsg('⏳ Ładowanie rekordów...', 'info');
+        recMsg.style.display = 'none';        // ukryj ewentualny poprzedni komunikat błędu
+        recLoading.style.display = 'flex';    // nakładka nad tabelą — bez przeskoku układu
         recLoad.disabled = true;
         try {
             const res = await Auth.apiFetch('/records?' + params.toString());
             if (!res.ok) throw new Error(await detail(res, `Błąd (${res.status})`));
             const rows = await res.json();
-            recTable.innerHTML = renderTable(rows);
-            recMsg.style.display = 'none';
+            makeSortable(recTable, rows);
             recPageInfo.textContent = rows.length
                 ? `Wiersze ${recOffset + 1}–${recOffset + rows.length}`
                 : `Brak rekordów (offset ${recOffset})`;
@@ -571,6 +688,7 @@ const Auth = (function () {
         } catch (err) {
             recShowMsg('❌ ' + err.message, 'error');
         } finally {
+            recLoading.style.display = 'none';
             recLoad.disabled = false;
         }
     }
@@ -614,7 +732,7 @@ const Auth = (function () {
         const res = await admCall(`/my-data?email=${encodeURIComponent(email)}`);
         if (!res) return;
         const rows = await res.json();
-        admData.innerHTML = renderTable(rows);
+        makeSortable(admData, rows);
         admShowMsg(rows.length ? `✅ Znaleziono ${rows.length} rekord(ów).` : 'ℹ️ Brak danych dla tego e-maila.', rows.length ? 'success' : 'info');
     });
 
